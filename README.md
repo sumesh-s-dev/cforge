@@ -61,7 +61,8 @@ After cloning:
 git clone git@github.com:sumesh-s-dev/cforge.git
 cd cforge
 ./cforge build && ./cforge test
-./cforge deploy   # optional: local systemd user service
+./cforge deploy            # optional: local systemd user service
+./cforge all               # test + deploy + git push (when clean)
 ```
 
 CI runs `./cforge test` (includes machine ELF checks) on every push to `main`.

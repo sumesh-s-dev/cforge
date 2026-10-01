@@ -854,6 +854,15 @@ def machine_test():
         print("ok %s -> %s" % (rel, expect))
 
 
+def all_in_one():
+    test()
+    deploy()
+    status()
+    if subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True).stdout.strip():
+        raise SystemExit("uncommitted changes; commit before publish")
+    subprocess.check_call([os.path.join(ROOT, "scripts", "publish-github.sh")])
+
+
 def main(argv):
     cmd = argv[1] if len(argv) > 1 else "help"
     if cmd == "build":
@@ -867,12 +876,14 @@ def main(argv):
         deploy()
     elif cmd == "status":
         status()
+    elif cmd == "all":
+        all_in_one()
     elif cmd == "machine":
         machine(argv)
     elif cmd == "machine-test":
         machine_test()
     else:
-        print("usage: cforge build | run | test | deploy | status | machine | machine-test")
+        print("usage: cforge build | run | test | deploy | status | all | machine | machine-test")
         if cmd != "help":
             return 2
     return 0
