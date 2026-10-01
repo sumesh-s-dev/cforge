@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CForge backend ecosystem specification — CForge</title>
 <link rel="stylesheet" href="../assets/site.css">
+<script>(function(){try{var t=localStorage.getItem("cforge-theme");if(t==="dark"||t==="light"){if(t==="dark")document.documentElement.setAttribute("data-theme","dark");return;}if(window.matchMedia("(prefers-color-scheme: dark)").matches)document.documentElement.setAttribute("data-theme","dark");}catch(e){}})();</script>
 </head>
 <body>
 <div class="layout">
-<nav class="sidebar">
-<a class="logo" href="../index.html">CForge</a>
+<nav class="sidebar"><div class="sidebar-top"><a class="logo" href="../index.html">CForge</a><button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle color theme">Dark</button></div>
 <section><h2>Learn</h2><ul>
 <li><a href="../learn/introduction.html">Introduction</a></li>
 <li><a href="../learn/install.html">Installation</a></li>
@@ -100,11 +100,13 @@ TCP accept (epoll) → optional TLS 1.3 → HTTP/1.1 parse → route match
 </table>
 <h2>Design invariants</h2>
 <p>These rules apply across all planned backends unless a document explicitly carves an exception:</p>
-<p>1. <strong>No allocation on the steady-state handler path</strong> in the reference epoll server; bump arenas and pre-sized buffers only.</p>
-<p>2. <strong>Integer return codes</strong> instead of exceptions; <code>0</code> success, positive domain codes, <code>-1</code> for hard failures.</p>
-<p>3. <strong>Library boundaries</strong> — protocols and storage are runtime functions, not language keywords.</p>
-<p>4. <strong>Bounded resources</strong> — max connections, header/body sizes, route count, idle timeouts; overload degrades by pausing accept, not by unbounded fds.</p>
-<p>5. <strong>Explicit shutdown</strong> — signal → eventfd → drain in-flight → release slabs and DB handles.</p>
+<ol>
+<li><strong>No allocation on the steady-state handler path</strong> in the reference epoll server; bump arenas and pre-sized buffers only.</li>
+<li><strong>Integer return codes</strong> instead of exceptions; <code>0</code> success, positive domain codes, <code>-1</code> for hard failures.</li>
+<li><strong>Library boundaries</strong> — protocols and storage are runtime functions, not language keywords.</li>
+<li><strong>Bounded resources</strong> — max connections, header/body sizes, route count, idle timeouts; overload degrades by pausing accept, not by unbounded fds.</li>
+<li><strong>Explicit shutdown</strong> — signal → eventfd → drain in-flight → release slabs and DB handles.</li>
+</ol>
 <h2>Relationship to other docs</h2>
 <p>The <a href="../learn/introduction.html">learn</a> track teaches CForge from a user perspective. <a href="../reference/runtime-api.html">Reference</a> lists the stable runtime surface. <a href="../status.html">Implementation status</a> marks what is shipped in 0.1 versus planned. This <strong>spec</strong> series is the systems design reference for contributors extending the runtime, adding protocols, or choosing between sync epoll and future async models.</p>
 <h2>Versioning</h2>
@@ -112,5 +114,6 @@ TCP accept (epoll) → optional TLS 1.3 → HTTP/1.1 parse → route match
 <footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
 </main>
 </div>
+<script src="../assets/site.js" defer></script>
 </body>
 </html>

@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HTTP, routing, serialization, and async models — CForge</title>
 <link rel="stylesheet" href="../assets/site.css">
+<script>(function(){try{var t=localStorage.getItem("cforge-theme");if(t==="dark"||t==="light"){if(t==="dark")document.documentElement.setAttribute("data-theme","dark");return;}if(window.matchMedia("(prefers-color-scheme: dark)").matches)document.documentElement.setAttribute("data-theme","dark");}catch(e){}})();</script>
 </head>
 <body>
 <div class="layout">
-<nav class="sidebar">
-<a class="logo" href="../index.html">CForge</a>
+<nav class="sidebar"><div class="sidebar-top"><a class="logo" href="../index.html">CForge</a><button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle color theme">Dark</button></div>
 <section><h2>Learn</h2><ul>
 <li><a href="../learn/introduction.html">Introduction</a></li>
 <li><a href="../learn/install.html">Installation</a></li>
@@ -98,10 +98,12 @@
 <p>Design rule: parsers are <strong>schema-specific</strong> in early releases to bound complexity; a general DOM JSON API is optional and lives off the hot path.</p>
 <h2>Authentication and authorization (planned)</h2>
 <p>Not in 0.1. Intended layers:</p>
-<p>1. <strong>Transport:</strong> mTLS between services</p>
-<p>2. <strong>Request:</strong> <code>Authorization: Bearer</code> JWT validation (HMAC or Ed25519) in middleware</p>
-<p>3. <strong>Session:</strong> Signed cookie + server-side store in Redis</p>
-<p>4. <strong>OAuth2:</strong> External IdP; runtime stores only validated claims in <code>Ctx</code> extensions</p>
+<ol>
+<li><strong>Transport:</strong> mTLS between services</li>
+<li><strong>Request:</strong> <code>Authorization: Bearer</code> JWT validation (HMAC or Ed25519) in middleware</li>
+<li><strong>Session:</strong> Signed cookie + server-side store in Redis</li>
+<li><strong>OAuth2:</strong> External IdP; runtime stores only validated claims in <code>Ctx</code> extensions</li>
+</ol>
 <p>Password hashing (Argon2id) belongs in registration flows, never in handlers as raw string compare.</p>
 <h2>Async Model A — synchronous reactor (shipped)</h2>
 <pre><code>
@@ -148,5 +150,6 @@ epoll_wait → schedule IoTask → on complete resume Continuation → handler s
 <footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
 </main>
 </div>
+<script src="../assets/site.js" defer></script>
 </body>
 </html>

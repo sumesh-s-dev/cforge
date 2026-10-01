@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Language and runtime boundary — CForge</title>
 <link rel="stylesheet" href="../assets/site.css">
+<script>(function(){try{var t=localStorage.getItem("cforge-theme");if(t==="dark"||t==="light"){if(t==="dark")document.documentElement.setAttribute("data-theme","dark");return;}if(window.matchMedia("(prefers-color-scheme: dark)").matches)document.documentElement.setAttribute("data-theme","dark");}catch(e){}})();</script>
 </head>
 <body>
 <div class="layout">
-<nav class="sidebar">
-<a class="logo" href="../index.html">CForge</a>
+<nav class="sidebar"><div class="sidebar-top"><a class="logo" href="../index.html">CForge</a><button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle color theme">Dark</button></div>
 <section><h2>Learn</h2><ul>
 <li><a href="../learn/introduction.html">Introduction</a></li>
 <li><a href="../learn/install.html">Installation</a></li>
@@ -100,10 +100,12 @@ app_delete(path_slice, handler_fn);
 <h2>FFI: C runtime and foreign libraries</h2>
 <p><strong>Today:</strong> Generated C includes <code>cforge_rt.h</code> and links <code>server.c</code>, <code>json.c</code>, <code>db.c</code> with <code>libsqlite3</code>, <code>libssl</code>, <code>libcrypto</code>, <code>pthread</code>. New runtime capabilities are added as C functions and whitelisted in the compiler’s builtin call table.</p>
 <p><strong>Planned FFI layers:</strong></p>
-<p>1. <strong>Stable C ABI</strong> — <code>CFORGE_API</code> functions documented in reference; versioned struct sizes for <code>Ctx</code> extensions.</p>
-<p>2. <strong>Dynamic plugins</strong> — <code>.so</code> loaded at startup registering routes or background jobs (explicit opt-in; no runtime <code>dlopen</code> in 0.1).</p>
-<p>3. <strong>Foreign DB/cache clients</strong> — PostgreSQL libpq or custom wire codec in C++; handlers still see <code>db_*</code>-style integers.</p>
-<p>4. <strong>Rust or Zig shims</strong> — thin wrappers exporting <code>extern &quot;C&quot;</code> symbols matching <code>CForgeFn</code> and allocator rules.</p>
+<ol>
+<li><strong>Stable C ABI</strong> — <code>CFORGE_API</code> functions documented in reference; versioned struct sizes for <code>Ctx</code> extensions.</li>
+<li><strong>Dynamic plugins</strong> — <code>.so</code> loaded at startup registering routes or background jobs (explicit opt-in; no runtime <code>dlopen</code> in 0.1).</li>
+<li><strong>Foreign DB/cache clients</strong> — PostgreSQL libpq or custom wire codec in C++; handlers still see <code>db_*</code>-style integers.</li>
+<li><strong>Rust or Zig shims</strong> — thin wrappers exporting <code>extern &quot;C&quot;</code> symbols matching <code>CForgeFn</code> and allocator rules.</li>
+</ol>
 <p>FFI code must respect <strong>arena lifetimes</strong>: any <code>Slice</code> handed to a handler must either point at static data, connection <code>in[]</code>, or the request arena until reset.</p>
 <h2>Machine backend boundary</h2>
 <p>The <a href="../learn/machine.html">machine backend</a> compiles a different subset to x86-64 ELF without linking the HTTP runtime. Registers <code>r0</code>–<code>r7</code> map to System V argument registers. Syscalls are explicit. There is no <code>Ctx</code> or <code>app_listen</code> on this path—it proves the front-end can target non-C ABIs.</p>
@@ -120,5 +122,6 @@ app_delete(path_slice, handler_fn);
 <footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
 </main>
 </div>
+<script src="../assets/site.js" defer></script>
 </body>
 </html>

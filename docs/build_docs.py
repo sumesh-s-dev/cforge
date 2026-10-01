@@ -9,7 +9,6 @@ CONTENT = os.path.join(ROOT, "content")
 OUT = ROOT
 
 NAV = """
-<a class="logo" href="{root}index.html">CForge</a>
 <section><h2>Learn</h2><ul>
 <li><a href="{root}learn/introduction.html">Introduction</a></li>
 <li><a href="{root}learn/install.html">Installation</a></li>
@@ -49,6 +48,7 @@ def md_to_html(text):
     out = []
     in_pre = False
     in_ul = False
+    in_ol = False
     in_table = False
 
     def close_ul():
@@ -56,6 +56,12 @@ def md_to_html(text):
         if in_ul:
             out.append("</ul>")
             in_ul = False
+
+    def close_ol():
+        nonlocal in_ol
+        if in_ol:
+            out.append("</ol>")
+            in_ol = False
 
     def close_table():
         nonlocal in_table
@@ -65,6 +71,7 @@ def md_to_html(text):
 
     def close_blocks():
         close_ul()
+        close_ol()
         close_table()
 
     for line in lines:
@@ -93,6 +100,7 @@ def md_to_html(text):
             continue
         elif line.startswith("|"):
             close_ul()
+            close_ol()
             if not in_table:
                 out.append("<table>")
                 in_table = True
@@ -105,8 +113,17 @@ def md_to_html(text):
                 + "".join("<%s>%s</%s>" % (tag, inline_md(c), tag) for c in cells)
                 + "</tr>"
             )
+        elif re.match(r"^\d+\.\s", line):
+            close_table()
+            close_ul()
+            if not in_ol:
+                out.append("<ol>")
+                in_ol = True
+            item = re.sub(r"^\d+\.\s+", "", line)
+            out.append("<li>%s</li>" % inline_md(item))
         elif line.startswith("- "):
             close_table()
+            close_ol()
             if not in_ul:
                 out.append("<ul>")
                 in_ul = True
@@ -126,7 +143,7 @@ def md_to_html(text):
 def inline_md(s):
     s = html.escape(s)
     s = re.sub(r"`([^`]+)`", r"<code>\1</code>", s)
-    s = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", s)
+    s = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", s)
     s = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2">\1</a>', s)
     return s
 
@@ -140,20 +157,24 @@ def page(rel_path, title, body_html, root_prefix):
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>%s — CForge</title>
 <link rel="stylesheet" href="%sassets/site.css">
+<script>(function(){try{var t=localStorage.getItem("cforge-theme");if(t==="dark"||t==="light"){if(t==="dark")document.documentElement.setAttribute("data-theme","dark");return;}if(window.matchMedia("(prefers-color-scheme: dark)").matches)document.documentElement.setAttribute("data-theme","dark");}catch(e){}})();</script>
 </head>
 <body>
 <div class="layout">
-<nav class="sidebar">%s</nav>
+<nav class="sidebar"><div class="sidebar-top"><a class="logo" href="%sindex.html">CForge</a><button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle color theme">Dark</button></div>%s</nav>
 <main>%s
 <footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
 </main>
 </div>
+<script src="%sassets/site.js" defer></script>
 </body>
 </html>""" % (
         html.escape(title),
         root_prefix,
+        root_prefix,
         nav,
         body_html,
+        root_prefix,
     )
 
 

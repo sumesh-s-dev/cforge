@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Memory, arenas, zero-copy, and concurrency — CForge</title>
 <link rel="stylesheet" href="../assets/site.css">
+<script>(function(){try{var t=localStorage.getItem("cforge-theme");if(t==="dark"||t==="light"){if(t==="dark")document.documentElement.setAttribute("data-theme","dark");return;}if(window.matchMedia("(prefers-color-scheme: dark)").matches)document.documentElement.setAttribute("data-theme","dark");}catch(e){}})();</script>
 </head>
 <body>
 <div class="layout">
-<nav class="sidebar">
-<a class="logo" href="../index.html">CForge</a>
+<nav class="sidebar"><div class="sidebar-top"><a class="logo" href="../index.html">CForge</a><button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle color theme">Dark</button></div>
 <section><h2>Learn</h2><ul>
 <li><a href="../learn/introduction.html">Introduction</a></li>
 <li><a href="../learn/install.html">Installation</a></li>
@@ -103,10 +103,12 @@ accept → … → parse complete → handler runs (arena allocates)
 </table>
 <p><strong>Planned:</strong> <code>sendfile</code> for static assets; <code>splice</code> between sockets for proxy mode; read-only <code>Slice</code> into mmap’d config files for the process lifetime.</p>
 <h2>Slice safety rules for authors</h2>
-<p>1. Do not store <code>Slice.ptr</code> in global or static variables.</p>
-<p>2. Do not return <code>Slice</code> from handlers to the runtime except through documented out-parameters filled before return.</p>
-<p>3. Treat <code>ctx-&gt;body</code> as valid only for the synchronous handler call.</p>
-<p>4. Assume another pipelined request on the same connection will repurpose <code>in[]</code> after the current response is processed.</p>
+<ol>
+<li>Do not store <code>Slice.ptr</code> in global or static variables.</li>
+<li>Do not return <code>Slice</code> from handlers to the runtime except through documented out-parameters filled before return.</li>
+<li>Treat <code>ctx-&gt;body</code> as valid only for the synchronous handler call.</li>
+<li>Assume another pipelined request on the same connection will repurpose <code>in[]</code> after the current response is processed.</li>
+</ol>
 <p>The language does not enforce borrow checking. <strong>Planned</strong> <code>@safe</code> mode would compile-time track <code>Slice</code> scopes; 0.1 relies on discipline and short arenas.</p>
 <h2>Concurrency and memory</h2>
 <p><strong>Model A (0.1):</strong> Single thread—no locks on slots, arenas, or SQLite use flag. <code>busy_timeout</code> on SQLite only matters if another process opens the same DB file.</p>
@@ -137,5 +139,6 @@ accept → … → parse complete → handler runs (arena allocates)
 <footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
 </main>
 </div>
+<script src="../assets/site.js" defer></script>
 </body>
 </html>

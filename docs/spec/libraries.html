@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Libraries: packages, config, auth, errors, logging, observability — CForge</title>
 <link rel="stylesheet" href="../assets/site.css">
+<script>(function(){try{var t=localStorage.getItem("cforge-theme");if(t==="dark"||t==="light"){if(t==="dark")document.documentElement.setAttribute("data-theme","dark");return;}if(window.matchMedia("(prefers-color-scheme: dark)").matches)document.documentElement.setAttribute("data-theme","dark");}catch(e){}})();</script>
 </head>
 <body>
 <div class="layout">
-<nav class="sidebar">
-<a class="logo" href="../index.html">CForge</a>
+<nav class="sidebar"><div class="sidebar-top"><a class="logo" href="../index.html">CForge</a><button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle color theme">Dark</button></div>
 <section><h2>Learn</h2><ul>
 <li><a href="../learn/introduction.html">Introduction</a></li>
 <li><a href="../learn/install.html">Installation</a></li>
@@ -92,8 +92,10 @@ tls = [&quot;cforge-http/tls&quot;]
 <p>OAuth2 authorization code flow belongs in a separate admin binary or edge gateway; the service runtime only validates bearer tokens.</p>
 <h2>Errors</h2>
 <p>Two layers:</p>
-<p>1. <strong>Runtime protocol errors</strong> — fixed HTTP statuses before handlers (malformed request)</p>
-<p>2. <strong>Application errors</strong> — integer codes from <code>db_*</code>, <code>json_*</code>, handler logic</p>
+<ol>
+<li><strong>Runtime protocol errors</strong> — fixed HTTP statuses before handlers (malformed request)</li>
+<li><strong>Application errors</strong> — integer codes from <code>db_*</code>, <code>json_*</code>, handler logic</li>
+</ol>
 <p><strong>Planned standardization:</strong></p>
 <ul>
 <li><code>cforge_error</code> enum in headers for tooling</li>
@@ -169,5 +171,6 @@ http_client_get(url_slice, headers, body_out) → status
 <footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
 </main>
 </div>
+<script src="../assets/site.js" defer></script>
 </body>
 </html>

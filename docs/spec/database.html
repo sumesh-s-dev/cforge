@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Database, pooling, cache, and message queues — CForge</title>
 <link rel="stylesheet" href="../assets/site.css">
+<script>(function(){try{var t=localStorage.getItem("cforge-theme");if(t==="dark"||t==="light"){if(t==="dark")document.documentElement.setAttribute("data-theme","dark");return;}if(window.matchMedia("(prefers-color-scheme: dark)").matches)document.documentElement.setAttribute("data-theme","dark");}catch(e){}})();</script>
 </head>
 <body>
 <div class="layout">
-<nav class="sidebar">
-<a class="logo" href="../index.html">CForge</a>
+<nav class="sidebar"><div class="sidebar-top"><a class="logo" href="../index.html">CForge</a><button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle color theme">Dark</button></div>
 <section><h2>Learn</h2><ul>
 <li><a href="../learn/introduction.html">Introduction</a></li>
 <li><a href="../learn/install.html">Installation</a></li>
@@ -101,10 +101,12 @@ Pool {
 <p>Isolation default: <code>READ COMMITTED</code> for OLTP handlers; serializable for financial slices via opt-in.</p>
 <h2>In-memory and distributed cache</h2>
 <p>Layers:</p>
-<p>1. <strong>Request arena</strong> — not a cache; discard every request</p>
-<p>2. <strong>Process LRU</strong> — fixed-size slab for hot keys (user by id, JWKS)</p>
-<p>3. <strong>Redis</strong> — shared cache and rate-limit counters</p>
-<p>4. <strong>CDN</strong> — HTTP cache headers for static content</p>
+<ol>
+<li><strong>Request arena</strong> — not a cache; discard every request</li>
+<li><strong>Process LRU</strong> — fixed-size slab for hot keys (user by id, JWKS)</li>
+<li><strong>Redis</strong> — shared cache and rate-limit counters</li>
+<li><strong>CDN</strong> — HTTP cache headers for static content</li>
+</ol>
 <p>Cache API sketch:</p>
 <pre><code>
 cache_get(ctx, key_slice, value_out_slice) → hit/miss
@@ -161,5 +163,6 @@ CREATE TABLE outbox (
 <footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
 </main>
 </div>
+<script src="../assets/site.js" defer></script>
 </body>
 </html>

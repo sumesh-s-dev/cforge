@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Production deployment, performance, and architecture comparison — CForge</title>
 <link rel="stylesheet" href="../assets/site.css">
+<script>(function(){try{var t=localStorage.getItem("cforge-theme");if(t==="dark"||t==="light"){if(t==="dark")document.documentElement.setAttribute("data-theme","dark");return;}if(window.matchMedia("(prefers-color-scheme: dark)").matches)document.documentElement.setAttribute("data-theme","dark");}catch(e){}})();</script>
 </head>
 <body>
 <div class="layout">
-<nav class="sidebar">
-<a class="logo" href="../index.html">CForge</a>
+<nav class="sidebar"><div class="sidebar-top"><a class="logo" href="../index.html">CForge</a><button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle color theme">Dark</button></div>
 <section><h2>Learn</h2><ul>
 <li><a href="../learn/introduction.html">Introduction</a></li>
 <li><a href="../learn/install.html">Installation</a></li>
@@ -80,10 +80,12 @@ eventfd wakes epoll_wait
 <h2>Performance model</h2>
 <h3>Steady-state cost per request (Model A)</h3>
 <p>Dominant terms:</p>
-<p>1. TLS decrypt (if used) — OpenSSL constant overhead</p>
-<p>2. HTTP parse — linear in header + body size, bounded</p>
-<p>3. Handler — JSON parse + SQLite bind/step (blocking)</p>
-<p>4. Response encode + encrypt + write</p>
+<ol>
+<li>TLS decrypt (if used) — OpenSSL constant overhead</li>
+<li>HTTP parse — linear in header + body size, bounded</li>
+<li>Handler — JSON parse + SQLite bind/step (blocking)</li>
+<li>Response encode + encrypt + write</li>
+</ol>
 <p>No per-request heap allocation; arena bump is O(bytes allocated in handler).</p>
 <h3>Capacity variables</h3>
 <table>
@@ -195,5 +197,6 @@ eventfd wakes epoll_wait
 <footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
 </main>
 </div>
+<script src="../assets/site.js" defer></script>
 </body>
 </html>

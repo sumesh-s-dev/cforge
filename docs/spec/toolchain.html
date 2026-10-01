@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Toolchain, build, test, security, compiler and IR roadmap — CForge</title>
 <link rel="stylesheet" href="../assets/site.css">
+<script>(function(){try{var t=localStorage.getItem("cforge-theme");if(t==="dark"||t==="light"){if(t==="dark")document.documentElement.setAttribute("data-theme","dark");return;}if(window.matchMedia("(prefers-color-scheme: dark)").matches)document.documentElement.setAttribute("data-theme","dark");}catch(e){}})();</script>
 </head>
 <body>
 <div class="layout">
-<nav class="sidebar">
-<a class="logo" href="../index.html">CForge</a>
+<nav class="sidebar"><div class="sidebar-top"><a class="logo" href="../index.html">CForge</a><button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle color theme">Dark</button></div>
 <section><h2>Learn</h2><ul>
 <li><a href="../learn/introduction.html">Introduction</a></li>
 <li><a href="../learn/install.html">Installation</a></li>
@@ -72,10 +72,12 @@ mach/add.cforge
 <p><strong>Planned:</strong> <code>cforge build --release</code> strips symbols; <code>cforge build --target aarch64-unknown-linux-gnu</code> cross-compile via LLVM backend.</p>
 <h2>Testing strategy</h2>
 <p>Layers:</p>
-<p>1. <strong>Machine tests</strong> — deterministic exit codes for arithmetic programs</p>
-<p>2. <strong>Integration tests</strong> — real TCP, TLS 1.3, pipelining, split writes, JSON edge cases</p>
-<p>3. <strong>Unit tests (planned)</strong> — C tests for HTTP parser vectors, JSON fuzz inputs</p>
-<p>4. <strong>Property tests (planned)</strong> — generate random valid HTTP requests within limits</p>
+<ol>
+<li><strong>Machine tests</strong> — deterministic exit codes for arithmetic programs</li>
+<li><strong>Integration tests</strong> — real TCP, TLS 1.3, pipelining, split writes, JSON edge cases</li>
+<li><strong>Unit tests (planned)</strong> — C tests for HTTP parser vectors, JSON fuzz inputs</li>
+<li><strong>Property tests (planned)</strong> — generate random valid HTTP requests within limits</li>
+</ol>
 <p>CI (GitHub Actions): Ubuntu, install gcc/SQLite/OpenSSL, run <code>./cforge test</code>. No committed TLS certs or production database.</p>
 <p>Local parity: tests use separate DB under <code>build/</code> to avoid touching <code>data/users.db</code>.</p>
 <h2>Documentation build</h2>
@@ -175,5 +177,6 @@ python3 docs/build_docs.py   # if docs changed
 <footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
 </main>
 </div>
+<script src="../assets/site.js" defer></script>
 </body>
 </html>
