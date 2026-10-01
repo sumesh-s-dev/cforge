@@ -19,7 +19,7 @@ Public site: **https://sumesh-s-dev.github.io/cforge/**
 | Structured **logging** (`cforge_logf`) | Done |
 | Request arena + backpressure | Done |
 | **`cforge.lock`** (`./cforge package`) | Done |
-| Toolchain (build, check, test, deploy, all, machine) | Done |
+| Toolchain (build, check, test, deploy, e2e, everything, deploy-docker, all, machine) | Done |
 | GitHub CI + Pages docs | Done |
 | **Docker Compose deploy** (Postgres + app) | Done (`./cforge deploy-docker`) |
 | **End-to-end deploy** (test + systemd + smoke) | Done (`./cforge e2e`) |

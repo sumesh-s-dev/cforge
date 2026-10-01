@@ -4,7 +4,7 @@ Persistence and asynchronous messaging in the CForge ecosystem are **runtime lib
 
 ## SQLite (shipped)
 
-**Shipped (0.1):** One `sqlite3` connection per process, opened before listen sockets. Schema:
+**Shipped (0.1):** SQLite pool (`CFORGE_DB_POOL`, default 4) of connections with prepared statements. Same schema:
 
 ```sql
 CREATE TABLE IF NOT EXISTS users (
@@ -24,7 +24,11 @@ DELETE FROM users WHERE id = ?1
 
 Parameters are bound; SQL text is never concatenated with user input. `SQLITE_TRANSIENT` on insert copies name bytes out of the request arena. `SELECT` copies TEXT into the arena before `sqlite3_reset`.
 
-**Checkout discipline:** Each `db_*` call sets an internal checkout flag. After the handler returns, `cforge_db_release` resets all statements and clears bindings—standing in for “return connection to pool” with a pool size of one.
+**Checkout discipline:** Each `db_*` call checks out a pool connection. After the handler returns, `cforge_db_release` returns it to the pool and resets statements.
+
+**Optional Postgres:** When `CFORGE_PG_DSN` is set and the binary is built with libpq, the same `db_*` API uses PostgreSQL (`users` table, `BIGSERIAL` id). Metrics report `db_backend postgres` or `sqlite`.
+
+**Optional Redis:** When `CFORGE_REDIS_URL` is set, the runtime connects and `DEL user:{id}` on insert/delete (cache invalidation). Metrics report `redis_backend connected` or `disabled`.
 
 Integer API:
 
@@ -38,9 +42,9 @@ Handlers map `-1` to `503` and increment `db_errors` in metrics.
 
 `busy_timeout` is 1000 ms for contention with external tools opening the same file.
 
-## Connection pool (planned)
+## Connection pool (PostgreSQL / MySQL target)
 
-Target shape for PostgreSQL or MySQL:
+Target shape for additional pool features on Postgres:
 
 ```text
 Pool {
@@ -59,9 +63,11 @@ Rules:
 
 Handlers keep the integer error policy; `db_get_user` becomes a thin wrapper over `SELECT` with dialect-specific types. Migrations run from toolchain (`cforge migrate`) applying versioned SQL files—not from handlers.
 
-## PostgreSQL wire client (planned)
+## PostgreSQL wire client
 
-Design options:
+**Shipped:** libpq via `CFORGE_PG_DSN` on the reactor thread (same sync model as 0.1).
+
+Design options for future scaling:
 
 | Approach | Pros | Cons |
 |---|---|---|
@@ -95,7 +101,7 @@ cache_set(ctx, key, value, ttl_sec) → status
 
 Serialization format for values is caller-chosen (JSON blob, msgpack). **Stampede protection:** single-flight lock per key in process LRU; Redis `SET NX` for cross-node.
 
-Invalidation: explicit `cache_del` on write paths (`POST`/`DELETE` users); **planned** pub/sub channel `cache:invalidate` for multi-instance deployments.
+Invalidation: explicit `cache_del` on write paths (`POST`/`DELETE` users); **shipped** Redis `DEL user:{id}` when `CFORGE_REDIS_URL` is set; **planned** pub/sub channel `cache:invalidate` for multi-instance deployments.
 
 ## Message queues (planned)
 
@@ -146,9 +152,9 @@ Operational requirements:
 
 | Capability | 0.1 | Target |
 |---|---|---|
-| Engine | SQLite file | Postgres primary |
-| Pool | Single conn | Sized pool + health |
-| Cache | None | LRU + Redis |
+| Engine | SQLite file or Postgres (DSN) | Postgres primary |
+| Pool | SQLite pool + libpq conn | Sized pool + health |
+| Cache | Redis invalidation (optional) | LRU + Redis read-through |
 | Queues | None | Outbox + Kafka/NATS |
 | Migrations | Embedded `CREATE TABLE` | Toolchain migrator |
 

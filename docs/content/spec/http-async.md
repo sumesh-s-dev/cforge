@@ -124,16 +124,18 @@ Hybrid deployments may run Model A on edge nodes and Model B behind internal loa
 
 WebSocket upgrade would share the HTTP parser’s header phase, then switch slot mode to frame codec. Server-Sent Events reuse HTTP/1.1 chunked responses with `text/event-stream`. Both stay out of language syntax; registration resembles `app_get` with a protocol flag.
 
+**Shipped:** `GET /ws` performs an RFC 6455 handshake and echoes client text frames (runtime-built; not registered via `app_get`).
+
 ## Caching semantics at HTTP layer
 
 `ETag` / `If-None-Match` and `Cache-Control` for static assets are **planned**. Dynamic JSON APIs default to `Cache-Control: no-store` unless handlers set headers via future `ctx_header` API.
 
 ## Error responses
 
-Runtime-generated errors use fixed bodies or empty bodies per status. Application errors use `ctx_text` / `ctx_status`. **Planned:** Problem Details (`application/problem+json`) helper for consistent machine-readable errors.
+Runtime-generated errors use fixed bodies or empty bodies per status. Application errors use `ctx_text` / `ctx_status`. **Shipped:** `ctx_problem` returns Problem Details (`application/problem+json`) with `title`, `detail`, and `status` fields (used on invalid create-user JSON).
 
 ## Testing implications
 
-Integration tests in `./cforge test` cover pipelining, split header writes, TLS 1.3, and graceful `SIGTERM`. Async Model B will need stress tests for continuation leaks and ordered response writes on one connection.
+Integration tests in `./cforge test` cover pipelining, split header writes, TLS 1.3, WebSocket `/ws` echo, and graceful `SIGTERM`. Async Model B will need stress tests for continuation leaks and ordered response writes on one connection.
 
 See [networking.html](networking.html) for sockets and [memory.html](memory.html) for buffer lifetimes during pipelining.

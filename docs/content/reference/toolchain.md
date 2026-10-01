@@ -7,8 +7,11 @@ All commands run from the repository root via `./cforge`.
 | `build` | Server backend: `.cforge` → C → `build/cforge-users` |
 | `check` | Parse and emit `build/users.gen.c` without linking |
 | `run` | Build and replace process with server binary |
-| `test` | Integration tests (HTTP + TLS + machine ELF) |
-| `deploy` | Build, install systemd user unit, health check |
+| `test` | Integration tests (HTTP + TLS + WebSocket + machine ELF) |
+| `deploy` | Build, install systemd user unit, restart, health check |
+| `e2e` | `test` + `deploy` + users API smoke on `:8080` |
+| `everything` | `check` + `package` + `e2e` + docs-site build + `deploy-docker` if Docker exists |
+| `deploy-docker` | `docker compose` Postgres + Redis + app on `:8080` |
 | `status` | GET `/health` and `/metrics` on port 8080 |
 | `all` | `test` + `deploy` + `status` + git publish script |
 | `package` | Write `cforge.lock` source fingerprints |
@@ -25,6 +28,6 @@ All commands run from the repository root via `./cforge`.
 
 ## CI
 
-GitHub Actions workflow `.github/workflows/ci.yml` runs `./cforge test` on Ubuntu.
+GitHub Actions `.github/workflows/ci.yml`: `./cforge test`, machine tests, Postgres smoke job, docs build job.
 
 Pages deploy: `.github/workflows/pages.yml` → https://sumesh-s-dev.github.io/cforge/

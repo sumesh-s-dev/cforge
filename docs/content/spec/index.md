@@ -1,6 +1,6 @@
 # CForge backend ecosystem specification
 
-This document set describes the **full CForge backend ecosystem design**: how application code, the language compiler, the C runtime, optional native machine code, and Linux facilities fit together to build network services. It is normative for **intent** and descriptive for **release 0.1**, which implements a thin vertical slice (HTTP/1.1, SQLite, TLS 1.3, single-threaded epoll) documented in the repository’s end-to-end guide.
+This document set describes the **full CForge backend ecosystem design**: how application code, the language compiler, the C runtime, optional native machine code, and Linux facilities fit together to build network services. It is normative for **intent** and descriptive for **release 0.1**, which implements a vertical slice (HTTP/1.1, WebSocket `/ws`, SQLite pool, optional Postgres/Redis, TLS 1.3, single-threaded epoll) documented in the repository’s end-to-end guide.
 
 The specification is organized by concern, not by source file. Cross-cutting themes—explicit memory, integer error codes, library-not-language features, and predictable syscall budgets—appear in every layer.
 
@@ -38,8 +38,7 @@ Release 0.1 ships the C server path and a partial machine path. The IR backend i
 │  Linux kernel — TCP/UDP, timers, files, optional io_uring     │
 └───────────────────────────────────────────────────────────────┘
 
-Optional sidecars (design): connection pool to PostgreSQL, Redis cache,
-message bus consumers — same process or worker pool; not in 0.1 binary.
+Optional sidecars: PostgreSQL (`CFORGE_PG_DSN`), Redis invalidation (`CFORGE_REDIS_URL`), and future message bus consumers — Kafka/NATS remain design-only.
 ```
 
 Handlers never see file descriptors. The runtime passes **views** (`Slice`) into fixed per-connection storage. That boundary is the primary safety and performance contract; see [boundary.html](boundary.html).
@@ -85,4 +84,4 @@ The [learn](../learn/introduction.html) track teaches CForge from a user perspec
 
 ## Versioning
 
-Specification sections label **Shipped (0.1)** when behavior matches the users service binary, and **Planned** when describing ecosystem components (PostgreSQL wire client, HTTP/2, Kafka, JWT, multi-thread pool) that appear in design discussions but not in the current tree. When shipped and planned diverge, the planned text states the migration path from the 0.1 implementation.
+Specification sections label **Shipped (0.1)** when behavior matches the users service binary, and **Planned** when describing ecosystem components (HTTP/2, Kafka, JWT, multi-thread pool) not yet in the tree. Postgres, Redis, and WebSocket are shipped when enabled via environment or built-in `/ws`; see [status.html](../status.html).

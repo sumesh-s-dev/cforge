@@ -1,6 +1,6 @@
 # CForge
 
-Low-level systems language: **dual compilers** (C server + native ELF), epoll HTTP/TLS/SQLite service, [full backend specification](https://sumesh-s-dev.github.io/cforge/docs/spec/).
+Low-level systems language: **dual compilers** (C server + native ELF), epoll HTTP/TLS/SQLite (optional Postgres/Redis), [full backend specification](https://sumesh-s-dev.github.io/cforge/docs/spec/).
 
 **Documentation:** https://sumesh-s-dev.github.io/cforge/docs/
 
@@ -19,21 +19,26 @@ Handlers live in `.cforge` files. HTTP, JSON, epoll, and SQLite stay in the C ru
 ./cforge build
 ./cforge test              # integration tests (ports 18081/18443)
 ./cforge machine-test      # native ELF add/expr programs
+./cforge e2e               # test + systemd deploy + API smoke on :8080
+./cforge everything        # e2e path + lockfile + docs build + docker (if installed)
 
 PORT=8080 CFORGE_DB=data/users.db ./cforge run
 # or
 ./cforge deploy            # systemd user unit on 8080 / 8443 (localhost)
+./cforge deploy-docker     # Compose: Postgres + Redis + app (needs Docker)
 ```
 
-Set `CFORGE_BIND=127.0.0.1` by default. TLS uses self-signed certs under `deploy/` (created on deploy).
+Set `CFORGE_BIND=127.0.0.1` by default. Optional `CFORGE_PG_DSN`, `CFORGE_REDIS_URL`. TLS uses self-signed certs under `deploy/` (created on deploy).
 
 ## Users API
 
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/health` | `ok` |
-| GET | `/metrics` | text counters |
-| POST | `/users` | JSON `{"name":"...","age":N}` |
+| GET | `/ready` | `ready` |
+| GET | `/metrics` | text counters (`db_backend`, `redis_backend`, …) |
+| GET | `/ws` | WebSocket upgrade + text echo (runtime) |
+| POST | `/users` | JSON `{"name":"...","age":N}`; bad JSON → problem+json |
 | GET | `/users/:id` | JSON user |
 | DELETE | `/users/:id` | `204` or `404` |
 
@@ -71,4 +76,4 @@ cd cforge
 ./cforge all               # test + deploy + git push (when clean)
 ```
 
-CI runs `./cforge test` (includes machine ELF checks) on every push to `main`.
+CI runs `./cforge test`, machine tests, Postgres smoke, and docs build on push to `main`. Pages: https://sumesh-s-dev.github.io/cforge/docs/

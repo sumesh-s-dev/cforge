@@ -1,6 +1,6 @@
 # CForge
 
-<p class="hero">Low-level systems language with a complete backend specification and a runnable HTTP/TLS/SQLite stack.</p>
+<p class="hero">Low-level systems language with a complete backend specification and a runnable HTTP/TLS/SQLite stack (optional Postgres, Redis, WebSocket).</p>
 
 ## Documentation
 
@@ -24,7 +24,7 @@ CForge sits close to the machine. Handlers are written in `.cforge` files. Netwo
 - [Introduction](learn/introduction.html) — philosophy and boundaries
 - [Installation](learn/install.html) — clone, build, test
 - [First program](learn/first-program.html) — hello service and native add
-- [Implementation status](status.html) — what is complete in release 0.1
+- [Implementation status](status.html) — shipped vs roadmap (release 1.0)
 
 ## Live demo
 

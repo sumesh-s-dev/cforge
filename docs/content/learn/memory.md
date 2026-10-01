@@ -42,7 +42,7 @@ Locals (`let x: u64 = 0`) live on the C stack for the duration of the handler ca
 
 ## Safety modes (planned)
 
-See [Safety modes](../reference/safety.html): `@unsafe`, `@checked`, `@safe` as compile modes — not enforced in 0.1 beyond explicit coding discipline.
+See [Safety modes](../reference/safety.html): `@unsafe` and `@checked` are accepted and stripped by the lexer; `@safe` compile mode is planned — not enforced beyond explicit coding discipline.
 
 ## Further reading
 

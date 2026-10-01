@@ -35,7 +35,7 @@ Packages publish as source trees or static archives with a `cforge.lock` pinning
 
 ## Configuration
 
-**Shipped (0.1):** Environment variables only (`PORT`, `TLS_PORT`, `CFORGE_BIND`, `CFORGE_DB`, TLS paths, `CFORGE_MAX_CONNS`, `CFORGE_IDLE_MS`). No config file parser in the binary.
+**Shipped (0.1):** Environment variables only (`PORT`, `TLS_PORT`, `CFORGE_BIND`, `CFORGE_DB`, `CFORGE_PG_DSN`, `CFORGE_REDIS_URL`, `CFORGE_DB_POOL`, TLS paths, `CFORGE_MAX_CONNS`, `CFORGE_IDLE_MS`). No config file parser in the binary.
 
 **Planned layers:**
 
@@ -99,25 +99,24 @@ Signal-safe logging on critical paths: preformatted ring buffer written from sig
 
 ## Observability
 
-**Shipped (0.1):** `GET /metrics` text format:
+**Shipped (0.1):** `GET /metrics` text format includes:
 
 ```text
 requests_total
 active_connections
 db_errors
 accept_paused
+db_backend
+redis_backend
+redis_errors
+ws_upgrades
 ```
 
-**Planned telemetry stack:**
-
-| Signal | Mechanism | Notes |
-|---|---|---|
-| Metrics | Prometheus exposition on `/metrics` | Histograms, labels for route |
-| Tracing | OpenTelemetry C SDK | Span per request, child spans for DB |
-| Profiling | `perf` / continuous CPU samples | Triggered by admin port |
-| Health | `/health` liveness, `/ready` checks DB | Kubernetes probes |
+`/health` liveness and `/ready` readiness are shipped. Histograms and OpenTelemetry remain planned.
 
 Cardinality control: aggregate by route pattern, not raw path (avoid `:id` explosion).
+
+**Planned telemetry stack:** OpenTelemetry tracing, profiling admin port, histogram latency on `/metrics`.
 
 ## Security libraries (cross-cutting)
 
