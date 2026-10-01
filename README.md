@@ -1,6 +1,6 @@
 # CForge
 
-Low-level systems language: **dual compilers** (C server + native ELF), epoll HTTP/TLS/SQLite (optional Postgres/Redis), [full backend specification](https://sumesh-s-dev.github.io/cforge/docs/spec/).
+**Backend DSL (0.1 demo)** that lowers handlers to C, plus an epoll **HTTP/TLS users service**. The [design spec](https://sumesh-s-dev.github.io/cforge/docs/spec/) describes a larger ecosystem; this repo ships the vertical slice.
 
 **Documentation:** https://sumesh-s-dev.github.io/cforge/docs/
 

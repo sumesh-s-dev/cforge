@@ -36,6 +36,7 @@ fn name(param: Type, ...) -> ReturnType {
 | Statement | Example |
 |---|---|
 | let | `let x: u64 = 0;` |
+| assign | `x = x + 1;` |
 | return | `return ctx_status(ctx, 404);` |
 | if / else | `if x != 0 { ... } else { ... }` |
 | while | `while cond { ... }` |
@@ -45,7 +46,7 @@ fn name(param: Type, ...) -> ReturnType {
 
 - Literals, identifiers, calls `f(a, b)`
 - Field access on `Slice`: `.len`, `.ptr`
-- Operators: `+ - * / == != < > <= >=`, unary `&`, `-`, `!`
+- Operators: `+ - * / % == != < > <= >=`, logical `&&` `||`, unary `&`, `*`, `-`, `!`
 - Address-of: `&id` for pointer parameters
 
 ## Machine-only syntax
@@ -67,8 +68,17 @@ The server backend (`./cforge build`) rejects raw instructions — use the [mach
 
 - generics, modules, `async fn`, comptime derives
 - operator overloading, enums, traits
+- full `@safe` / `@checked` enforcement (`@name` warns and is ignored)
 
-## Struct types (1.0)
+## Extern (runtime symbols)
+
+```forge
+extern fn db_get_user(ctx: *Ctx, id: u64, out_id: *u64, name: *Slice, age: *u32) -> i32;
+```
+
+`extern fn` declares a C/runtime symbol callable from handlers without editing the compiler allowlist.
+
+## Struct types
 
 ```forge
 struct CreateUser {

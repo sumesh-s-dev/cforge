@@ -1,30 +1,30 @@
 # CForge
 
-<p class="hero">Low-level systems language with a complete backend specification and a runnable HTTP/TLS/SQLite stack (optional Postgres, Redis, WebSocket).</p>
+<p class="hero">Small backend DSL (compiles to C) plus an epoll HTTP/TLS/SQLite users service. Full ecosystem design is documented; most of it is roadmap.</p>
 
 ## Documentation
 
 | | |
 |---|---|
 | **Book** | [Introduction](learn/introduction.html) |
-| **Full backend spec** | [Specification index](spec/index.html) — 100% architecture document |
-| **Status** | [Release 1.0](status.html) |
+| **Design spec** | [Specification index](spec/index.html) — target architecture |
+| **Status** | [Release 0.1 demo](status.html) |
 
-CForge sits close to the machine. Handlers are written in `.cforge` files. Networking, HTTP, JSON, TLS, and SQLite live in a **C runtime library**, not in the language grammar.
+Handlers live in `.cforge` files. HTTP, JSON, TLS, and storage live in the **C runtime**, not in the language grammar.
 
 ## Two compile paths
 
 | Path | Command | Output |
 |---|---|---|
 | **Server** | `./cforge build` | Native binary via generated C11 + runtime |
-| **Machine** | `./cforge machine prog.cforge` | x86-64 ELF without gcc |
+| **Machine (demo)** | `./cforge machine prog.cforge` | x86-64 ELF without gcc |
 
 ## Quick links
 
 - [Introduction](learn/introduction.html) — philosophy and boundaries
 - [Installation](learn/install.html) — clone, build, test
-- [First program](learn/first-program.html) — hello service and native add
-- [Implementation status](status.html) — shipped vs roadmap (release 1.0)
+- [Language reference](learn/language.html) — implemented subset
+- [Implementation status](status.html) — shipped vs roadmap
 
 ## Live demo
 

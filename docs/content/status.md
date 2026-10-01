@@ -1,41 +1,39 @@
 # Implementation status
 
-**Specification:** [100% complete on the documentation site](../spec/index.html) — full backend ecosystem design (boundary through production).
+**Specification:** nine-chapter **design document** on the site (boundary through production) — describes target architecture, not a promise that every item is implemented.
 
-**Release 1.0 (this repository)** ships the runnable vertical slice plus libraries specified as *Shipped* below.
+**This repository (release 0.1 demo)** ships a runnable **users-service vertical slice**: CForge-syntax handlers → generated C → epoll HTTP/TLS runtime.
 
 Public site: **https://sumesh-s-dev.github.io/cforge/**
 
-## Shipped in release 1.0
+## Shipped in this repo
 
 | Area | Status |
 |---|---|
-| Full backend **specification** (9 chapters) | **100%** documented |
-| Lexer / parser + **struct** types | Done |
+| Backend **design docs** (9 chapters) | Written |
+| Lexer / parser (small subset) | Done |
+| **struct** types (must appear before use in source) | Done |
 | C server backend + runtime | Done |
-| Machine ELF backend (x86-64) | Done |
-| epoll HTTP/1.1 + TLS 1.3 | Done |
-| SQLite users API + **connection pool** | Done |
+| Machine ELF backend (x86-64 demo) | Done |
+| epoll HTTP/1.1 + TLS 1.3 + WebSocket `/ws` | Done |
+| SQLite pool + optional Postgres + optional Redis | Done |
 | Structured **logging** (`cforge_logf`) | Done |
-| Request arena + backpressure | Done |
 | **`cforge.lock`** (`./cforge package`) | Done |
-| Toolchain (build, check, test, deploy, e2e, everything, deploy-docker, all, machine) | Done |
+| Toolchain + `./cforge compiler-test` | Done |
 | GitHub CI + Pages docs | Done |
-| **Docker Compose deploy** (Postgres + app) | Done (`./cforge deploy-docker`) |
-| **End-to-end deploy** (test + systemd + smoke) | Done (`./cforge e2e`) |
+| **Docker Compose** (Postgres + Redis + app) | Done (`./cforge deploy-docker`) |
+| **End-to-end** (`./cforge e2e`, `./cforge everything`) | Done |
 
-## Planned (spec describes; code follows)
+## Roadmap (spec describes; code follows)
 
-| Area | Spec | Code |
-|---|---|---|
-| PostgreSQL wire / libpq | Documented | **Shipped** (`CFORGE_PG_DSN`) |
-| HTTP/2, HTTP/3 | Documented | Planned |
-| **WebSockets** (`GET /ws` echo) | Documented | **Shipped** |
-| **Redis** cache invalidation | Documented | **Shipped** (`CFORGE_REDIS_URL`) |
-| Native IR compiler for server | Documented | In progress (`cforge_mach`) |
-| Redis / Kafka / NATS clients | Documented | Redis partial; Kafka/NATS planned |
-| `@checked` / `@safe` modes | Documented | `@checked`/`@unsafe` parsed; `@safe` planned |
-| Package registry + semver resolver | Documented | Lockfile only |
+| Area | Code today |
+|---|---|
+| HTTP/2, HTTP/3 | Planned |
+| Kafka / NATS | Planned |
+| JWT / OAuth | Planned |
+| Full **`@safe`** checking | Planned (`@…` attributes warn and are ignored) |
+| Package registry + semver | Lockfile only |
+| Native IR server (replace C path) | `cforge_mach` demo only |
 
 ## Environment
 
@@ -43,23 +41,17 @@ Public site: **https://sumesh-s-dev.github.io/cforge/**
 |---|---|
 | `CFORGE_DB_POOL` | SQLite pool size (1–8, default 4) |
 | `CFORGE_PG_DSN` | Optional Postgres via libpq |
-| `CFORGE_REDIS_URL` | Optional Redis (`redis://host:6379`) |
+| `CFORGE_REDIS_URL` | Optional Redis (`redis://host:6379`); `./cforge deploy` can start bundled Redis |
 
 ## Verification
 
 ```bash
-./cforge package
+./cforge compiler-test
 ./cforge test
-./cforge e2e              # test + systemd deploy + smoke
-./cforge everything       # + docs build + docker (if installed)
-curl http://127.0.0.1:8080/health
+./cforge e2e
+./cforge everything
 ```
 
-## Definition of complete
+## Honest pitch
 
-| Scope | Coverage |
-|---|---|
-| Original backend architecture **document** | **100%** on [spec index](../spec/index.html) |
-| Same architecture **implemented in code** | **Core path 100%**; advanced subsystems per table above |
-
-CForge 1.0 is **spec-complete** and **production-demo-complete** for the HTTP/SQLite/TLS stack. Remaining spec items are explicit roadmap entries, not missing documentation.
+CForge 0.1 is a **backend DSL + runtime demo**, not a general systems language yet. The spec is a **north star**; the binary is the users microservice path documented in [END-TO-END.md](https://github.com/sumesh-s-dev/cforge/blob/main/END-TO-END.md).

@@ -1,9 +1,10 @@
 """x86-64 machine backend.
 
-Pipeline: parse → type check → MIR → machine instructions → bytes → ELF64.
+Parse a tiny .cforge subset and emit raw x86-64 instructions into ELF64.
+There is no MIR or separate type checker (see docs learn/machine).
 
-CForge registers r0-r7 are a fixed map onto the System V argument registers.
-The return value is r0, copied to rax by `ret`. This file does not call gcc.
+Registers r0–r7 map to System V argument registers; `ret` moves r0 → rax.
+This file does not call gcc.
 """
 
 import importlib.machinery

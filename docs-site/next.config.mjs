@@ -8,6 +8,9 @@ const config = {
   reactStrictMode: true,
   basePath: '/cforge',
   trailingSlash: true,
+  env: {
+    NEXT_PUBLIC_SITE_URL: 'https://sumesh-s-dev.github.io/cforge',
+  },
 };
 
 export default withMDX(config);

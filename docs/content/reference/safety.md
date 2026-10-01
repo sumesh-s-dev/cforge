@@ -8,7 +8,7 @@ CForge prioritizes **control** over automatic memory safety.
 |---|---|
 | Explicit pointers and slices | **Implemented** |
 | Request arena reset | **Implemented** |
-| `@unsafe` / `@checked` attributes on functions | **Ignored** (lexer strips; no extra checks yet) |
+| `@unsafe` / `@checked` attributes on functions | **Warned and ignored** (no enforcement yet) |
 | `@safe` mode | **Planned** |
 
 ## Planned compiler modes

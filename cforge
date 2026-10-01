@@ -21,7 +21,7 @@ import urllib.request
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 
-KEYWORDS = {"fn", "let", "if", "else", "while", "return", "struct"}
+KEYWORDS = {"fn", "let", "if", "else", "while", "return", "struct", "extern"}
 RUNTIME = {
     "slice_empty",
     "ctx_param_u64",
@@ -52,6 +52,8 @@ BASE_TYPES = {
     "Ctx": "Ctx",
 }
 STRUCT_TYPES = set()
+EXTERN_FNS = set()
+ATTR_WARNINGS = []
 
 
 class CompileError(Exception):
@@ -66,6 +68,8 @@ class Tok:
 
 
 def lex(src):
+    global ATTR_WARNINGS
+    ATTR_WARNINGS = []
     tokens = []
     i = 0
     line = 1
@@ -80,9 +84,12 @@ def lex(src):
             i += 1
             continue
         if c == "@":
+            attr_line = line
             i += 1
+            start = i
             while i < n and (src[i].isalnum() or src[i] == "_"):
                 i += 1
+            ATTR_WARNINGS.append((attr_line, src[start:i] or "unknown"))
             continue
         if c == "/" and i + 1 < n and src[i + 1] == "/":
             while i < n and src[i] != "\n":
@@ -126,7 +133,7 @@ def lex(src):
             tokens.append(Tok(kind, word, line))
             continue
         two = src[i : i + 2]
-        if two in ("==", "!=", "<=", ">=", "->"):
+        if two in ("==", "!=", "<=", ">=", "->", "&&", "||"):
             tokens.append(Tok(two, two, line))
             i += 2
             continue
@@ -169,6 +176,9 @@ class Parser:
         while not self.at("eof"):
             if self.at("kw", "struct"):
                 structs.append(self.parse_struct())
+            elif self.at("kw", "extern"):
+                self.eat("kw", "extern")
+                fns.append(self.parse_fn(extern=True))
             else:
                 fns.append(self.parse_fn())
         if not any(fn["name"] == "main" for fn in fns):
@@ -178,6 +188,7 @@ class Parser:
     def parse_struct(self):
         self.eat("kw", "struct")
         name = self.eat("ident").value
+        STRUCT_TYPES.add(name)
         self.eat("{")
         fields = []
         while not self.at("}"):
@@ -189,7 +200,7 @@ class Parser:
         self.eat("}")
         return {"name": name, "fields": fields}
 
-    def parse_fn(self):
+    def parse_fn(self, extern=False):
         line = self.eat("kw", "fn").line
         name = self.eat("ident").value
         self.eat("(")
@@ -202,8 +213,11 @@ class Parser:
         self.eat(")")
         self.eat("->")
         ret = self.parse_type()
+        if extern:
+            self.eat(";")
+            return {"name": name, "params": params, "ret": ret, "body": None, "line": line, "extern": True}
         body = self.parse_block()
-        return {"name": name, "params": params, "ret": ret, "body": body, "line": line}
+        return {"name": name, "params": params, "ret": ret, "body": body, "line": line, "extern": False}
 
     def parse_param(self):
         name = self.eat("ident").value
@@ -247,6 +261,13 @@ class Parser:
             expr = self.parse_expr()
             self.eat(";")
             return {"op": "let", "name": name, "type": typ, "expr": expr, "line": line}
+        if self.at("ident") and self.toks[self.i + 1].kind == "=":
+            line = self.cur().line
+            name = self.eat("ident").value
+            self.eat("=")
+            expr = self.parse_expr()
+            self.eat(";")
+            return {"op": "assign", "name": name, "expr": expr, "line": line}
         if self.at("kw", "if"):
             return self.parse_if()
         if self.at("kw", "while"):
@@ -295,13 +316,32 @@ class Parser:
         return {"op": "if", "cond": cond, "body": body, "else": els, "line": line}
 
     def parse_expr(self):
+        return self.parse_or()
+
+    def parse_or(self):
+        left = self.parse_and()
+        while self.at("||"):
+            op = self.eat("||").value
+            right = self.parse_and()
+            left = {"op": "bin", "bin": op, "left": left, "right": right}
+        return left
+
+    def parse_and(self):
+        left = self.parse_cmp()
+        while self.at("&&"):
+            op = self.eat("&&").value
+            right = self.parse_cmp()
+            left = {"op": "bin", "bin": op, "left": left, "right": right}
+        return left
+
+    def parse_cmp(self):
         return self.parse_bin(("==", "!=", "<", ">", "<=", ">="), self.parse_add)
 
     def parse_add(self):
         return self.parse_bin(("+", "-"), self.parse_mul)
 
     def parse_mul(self):
-        return self.parse_bin(("*", "/"), self.parse_unary)
+        return self.parse_bin(("*", "/", "%"), self.parse_unary)
 
     def parse_bin(self, ops, lower):
         left = lower()
@@ -312,7 +352,7 @@ class Parser:
         return left
 
     def parse_unary(self):
-        if self.cur().kind in ("&", "!", "-"):
+        if self.cur().kind in ("&", "!", "-", "*"):
             op = self.eat(self.cur().kind).value
             return {"op": "unary", "unary": op, "expr": self.parse_unary()}
         return self.parse_postfix()
@@ -368,8 +408,8 @@ def ctype(typ):
 
 def c_string(text):
     out = ['"']
-    for ch in text:
-        o = ord(ch)
+    for b in text.encode("utf-8"):
+        ch = chr(b)
         if ch == "\\":
             out.append("\\\\")
         elif ch == '"':
@@ -380,10 +420,10 @@ def c_string(text):
             out.append("\\r")
         elif ch == "\t":
             out.append("\\t")
-        elif 32 <= o < 127:
+        elif 32 <= b < 127:
             out.append(ch)
         else:
-            out.append("\\x%02x" % o)
+            out.append("\\x%02x" % b)
     out.append('"')
     return "".join(out)
 
@@ -414,70 +454,88 @@ def gen_expr(expr, env, functions):
         if expr["fn"]["op"] != "ident":
             raise CompileError("call target must be a function name")
         fname = expr["fn"]["value"]
-        if fname not in functions and fname not in RUNTIME:
+        if fname not in functions and fname not in RUNTIME and fname not in EXTERN_FNS:
             raise CompileError(f"unknown function {fname}")
         args = ", ".join(gen_expr(a, env, functions) for a in expr["args"])
         return "%s(%s)" % (fname, args)
     raise CompileError("bad expr")
 
 
+def gen_if_stmt(stmt, env, functions, indent):
+    pad = "    " * indent
+    lines = []
+    cur = stmt
+    first = True
+    while True:
+        head = "if" if first else "else if"
+        lines.append("%s%s (%s) {" % (pad, head, gen_expr(cur["cond"], env, functions)))
+        branch_env = dict(env)
+        lines.extend(gen_block(cur["body"], branch_env, functions, indent + 1))
+        lines.append("%s}" % pad)
+        first = False
+        els = cur["else"]
+        if els is None:
+            break
+        if isinstance(els, list) and els and els[0]["op"] == "if":
+            cur = els[0]
+            continue
+        lines.append("%selse {" % pad)
+        branch_env = dict(env)
+        lines.extend(gen_block(els, branch_env, functions, indent + 1))
+        lines.append("%s}" % pad)
+        break
+    return lines
+
+
 def gen_block(stmts, env, functions, indent):
+    block_env = dict(env)
     lines = []
     pad = "    " * indent
     for stmt in stmts:
         op = stmt["op"]
         if op == "let":
-            if stmt["name"] in env:
+            if stmt["name"] in block_env:
                 raise CompileError(f"{stmt['line']}: duplicate {stmt['name']}")
-            env[stmt["name"]] = stmt["type"]
+            block_env[stmt["name"]] = stmt["type"]
             lines.append(
                 "%s%s %s = %s;"
-                % (pad, ctype(stmt["type"]), stmt["name"], gen_expr(stmt["expr"], env, functions))
+                % (pad, ctype(stmt["type"]), stmt["name"], gen_expr(stmt["expr"], block_env, functions))
             )
+        elif op == "assign":
+            if stmt["name"] not in block_env:
+                raise CompileError(f"{stmt['line']}: unknown {stmt['name']}")
+            lines.append("%s%s = %s;" % (pad, stmt["name"], gen_expr(stmt["expr"], block_env, functions)))
         elif op == "insn":
             raise CompileError(
                 "%s: raw instruction `%s` is compiled by `cforge machine`, not the C runtime path"
                 % (stmt["line"], stmt["mnem"])
             )
         elif op == "return":
-            lines.append("%sreturn %s;" % (pad, gen_expr(stmt["expr"], env, functions)))
+            lines.append("%sreturn %s;" % (pad, gen_expr(stmt["expr"], block_env, functions)))
         elif op == "expr":
-            lines.append("%s%s;" % (pad, gen_expr(stmt["expr"], env, functions)))
+            lines.append("%s%s;" % (pad, gen_expr(stmt["expr"], block_env, functions)))
         elif op == "while":
-            lines.append("%swhile (%s) {" % (pad, gen_expr(stmt["cond"], env, functions)))
-            lines.extend(gen_block(stmt["body"], env, functions, indent + 1))
+            lines.append("%swhile (%s) {" % (pad, gen_expr(stmt["cond"], block_env, functions)))
+            lines.extend(gen_block(stmt["body"], dict(block_env), functions, indent + 1))
             lines.append("%s}" % pad)
         elif op == "if":
-            lines.append("%sif (%s) {" % (pad, gen_expr(stmt["cond"], env, functions)))
-            lines.extend(gen_block(stmt["body"], env, functions, indent + 1))
-            lines.append("%s}" % pad)
-            if isinstance(stmt["else"], list) and stmt["else"] and stmt["else"][0]["op"] == "if":
-                # else if: attach by rewriting the next if with an else prefix
-                nxt = stmt["else"][0]
-                lines[-1] = "%s} else if (%s) {" % (pad, gen_expr(nxt["cond"], env, functions))
-                lines.extend(gen_block(nxt["body"], env, functions, indent + 1))
-                lines.append("%s}" % pad)
-                if nxt["else"] is not None:
-                    lines[-1] = "%s} else {" % pad
-                    if isinstance(nxt["else"], list) and nxt["else"] and nxt["else"][0].get("op") == "if":
-                        raise CompileError("else-if chain too deep for this compiler")
-                    lines.extend(gen_block(nxt["else"], env, functions, indent + 1))
-                    lines.append("%s}" % pad)
-            elif stmt["else"] is not None:
-                lines[-1] = "%s} else {" % pad
-                lines.extend(gen_block(stmt["else"], env, functions, indent + 1))
-                lines.append("%s}" % pad)
+            lines.extend(gen_if_stmt(stmt, block_env, functions, indent))
         else:
             raise CompileError("bad stmt")
     return lines
 
 
 def emit(parsed):
+    global EXTERN_FNS
     structs = parsed["structs"]
     fns = parsed["fns"]
+    EXTERN_FNS = set()
+    for fn in fns:
+        if fn.get("extern"):
+            EXTERN_FNS.add(fn["name"])
     for s in structs:
         STRUCT_TYPES.add(s["name"])
-    names = {fn["name"] for fn in fns}
+    names = {fn["name"] for fn in fns if not fn.get("extern")}
     lines = [
         '#include "cforge_rt.h"',
         "",
@@ -489,11 +547,15 @@ def emit(parsed):
         lines.append("} %s;" % st["name"])
         lines.append("")
     for fn in fns:
+        if fn.get("extern"):
+            continue
         cname = "cforge_main" if fn["name"] == "main" else fn["name"]
         params = ", ".join("%s %s" % (ctype(p["type"]), p["name"]) for p in fn["params"]) or "void"
         lines.append("static %s %s(%s);" % (ctype(fn["ret"]), cname, params))
     lines.append("")
     for fn in fns:
+        if fn.get("extern"):
+            continue
         cname = "cforge_main" if fn["name"] == "main" else fn["name"]
         params = ", ".join("%s %s" % (ctype(p["type"]), p["name"]) for p in fn["params"]) or "void"
         lines.append("static %s %s(%s) {" % (ctype(fn["ret"]), cname, params))
@@ -518,15 +580,53 @@ def read_entry():
     return os.path.join(ROOT, entry)
 
 
-def compile_cforge(src_path, out_c):
+def compile_cforge_src(src, out_c):
     global STRUCT_TYPES
     STRUCT_TYPES = set()
-    with open(src_path, encoding="utf-8") as f:
-        src = f.read()
     parsed = Parser(lex(src)).parse()
+    for attr_line, attr_name in ATTR_WARNINGS:
+        print(
+            "warning: %s: @%s ignored (no checking yet)" % (attr_line, attr_name),
+            file=sys.stderr,
+        )
     os.makedirs(os.path.dirname(out_c), exist_ok=True)
     with open(out_c, "w", encoding="utf-8") as f:
         f.write(emit(parsed))
+
+
+def compile_cforge(src_path, out_c):
+    with open(src_path, encoding="utf-8") as f:
+        compile_cforge_src(f.read(), out_c)
+
+
+def compiler_test():
+    ok_src = """
+struct Pair { a: u32; b: u32; }
+fn main() -> i32 {
+    let x: u32 = 1;
+    x = x + 1;
+    if x == 2 && x != 0 {
+        return 0;
+    }
+    return 1;
+}
+"""
+    out = os.path.join(ROOT, "build", "compiler-test.gen.c")
+    compile_cforge_src(ok_src, out)
+    if "x = (x + 1)" not in open(out, encoding="utf-8").read():
+        raise SystemExit("compiler_test: assignment codegen missing")
+    utf_src = 'fn main() -> i32 { let s: Slice = "é"; return 0; }'
+    compile_cforge_src(utf_src, out)
+    gen = open(out, encoding="utf-8").read()
+    if ".len=2" not in gen.replace(" ", "") and ".len = 2" not in gen:
+        raise SystemExit("compiler_test: utf-8 string length")
+    bad = "fn main() -> i32 { let x: u32 = 0; let x: u32 = 1; return 0; }"
+    try:
+        compile_cforge_src(bad, out)
+        raise SystemExit("compiler_test: expected duplicate let error")
+    except CompileError:
+        pass
+    print("ok compiler-test")
 
 
 def cc_cmd(out_bin):
@@ -565,6 +665,7 @@ def cc_cmd(out_bin):
 
 
 def check_only():
+    compiler_test()
     out_c = os.path.join(ROOT, "build", "users.gen.c")
     compile_cforge(read_entry(), out_c)
     print("ok %s" % out_c)
@@ -664,6 +765,7 @@ def ensure_redis_service(systemctl):
 
 
 def test():
+    compiler_test()
     bin_path = build()
     port = 18081
     tls_port = 18443
@@ -886,6 +988,27 @@ def test():
             raise SystemExit("shutdown status %s" % proc.returncode)
 
 
+def docker_cmd():
+    path = os.environ.get("PATH", "")
+    home_bin = os.path.join(os.path.expanduser("~"), "bin")
+    if home_bin not in path.split(os.pathsep):
+        path = home_bin + os.pathsep + path
+    env = os.environ.copy()
+    env["PATH"] = path
+    if not env.get("DOCKER_HOST"):
+        uid = os.getuid()
+        sock = "/run/user/%d/docker.sock" % uid
+        if os.path.exists(sock):
+            env["DOCKER_HOST"] = "unix://" + sock
+    plugins = os.path.join(os.path.expanduser("~"), ".docker", "cli-plugins")
+    if os.path.isdir(plugins) and "DOCKER_CONFIG" not in env:
+        env["DOCKER_CONFIG"] = os.path.join(os.path.expanduser("~"), ".docker")
+    exe = shutil.which("docker", path=env["PATH"])
+    if not exe:
+        return None, env
+    return exe, env
+
+
 def deploy():
     bin_path = build()
     data = os.path.join(ROOT, "data")
@@ -927,6 +1050,10 @@ def deploy():
     redis_url = ensure_redis_service(systemctl)
     if redis_url:
         redis_env = "Environment=CFORGE_REDIS_URL=%s\n        " % redis_url
+    docker, denv = docker_cmd()
+    if docker:
+        compose = os.path.join(ROOT, "deploy", "docker-compose.yml")
+        subprocess.call([docker, "compose", "-f", compose, "stop", "cforge"], cwd=ROOT, env=denv)
     unit = textwrap.dedent(
         f"""\
         [Unit]
@@ -1035,27 +1162,6 @@ def e2e():
     deploy()
     smoke_api(8080)
     print("e2e ok: test + systemd deploy + API smoke on :8080")
-
-
-def docker_cmd():
-    path = os.environ.get("PATH", "")
-    home_bin = os.path.join(os.path.expanduser("~"), "bin")
-    if home_bin not in path.split(os.pathsep):
-        path = home_bin + os.pathsep + path
-    env = os.environ.copy()
-    env["PATH"] = path
-    if not env.get("DOCKER_HOST"):
-        uid = os.getuid()
-        sock = "/run/user/%d/docker.sock" % uid
-        if os.path.exists(sock):
-            env["DOCKER_HOST"] = "unix://" + sock
-    plugins = os.path.join(os.path.expanduser("~"), ".docker", "cli-plugins")
-    if os.path.isdir(plugins) and "DOCKER_CONFIG" not in env:
-        env["DOCKER_CONFIG"] = os.path.join(os.path.expanduser("~"), ".docker")
-    exe = shutil.which("docker", path=env["PATH"])
-    if not exe:
-        return None, env
-    return exe, env
 
 
 def deploy_docker():
@@ -1189,8 +1295,10 @@ def main(argv):
         machine(argv)
     elif cmd == "machine-test":
         machine_test()
+    elif cmd == "compiler-test":
+        compiler_test()
     else:
-        print("usage: cforge build | check | run | test | deploy | e2e | everything | deploy-docker | status | package | all | machine | machine-test")
+        print("usage: cforge build | check | run | test | deploy | e2e | everything | deploy-docker | status | package | all | machine | machine-test | compiler-test")
         if cmd != "help":
             return 2
     return 0

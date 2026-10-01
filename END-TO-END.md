@@ -2,7 +2,7 @@
 
 **Documentation site:** https://sumesh-s-dev.github.io/cforge/
 
-This document describes the system in `/home/knight/Projects/cforge` as it is built and deployed. It is the path from a `.cforge` source file to a live HTTP and TLS process. It is not the full backend design (no PostgreSQL wire protocol, HTTP/2, HTTP/3, Kafka, or a package registry).
+This document describes the users service in this repository: from `.cforge` source to a live HTTP/TLS process. Paths below use **`$REPO`** (your clone root). It is not the full backend design (HTTP/2, Kafka, package registry, etc.).
 
 A request travels through these layers:
 
@@ -13,7 +13,7 @@ Client
   → HTTP/1.1 parser
   → route table
   → handler compiled from app/users.cforge
-  → JSON and/or SQLite
+  → JSON and/or SQLite (optional Postgres, Redis cache invalidation)
   → response bytes
   → write / SSL_write
   → arena reset and database release
@@ -26,12 +26,12 @@ The language does not know what HTTP, JSON, TLS, or SQL are. Those live in the C
 | Item | Value |
 |---|---|
 | Unit | `cforge-users.service` (systemd user) |
-| Binary | `/home/knight/Projects/cforge/build/cforge-users` |
+| Binary | `$REPO/build/cforge-users` |
 | HTTP | `http://127.0.0.1:8080` |
 | TLS | `https://127.0.0.1:8443` (TLS 1.3 only, self-signed certificate) |
-| Database | `/home/knight/Projects/cforge/data/users.db` (SQLite, WAL) |
-| Certificate | `/home/knight/Projects/cforge/deploy/cert.pem` |
-| Private key | `/home/knight/Projects/cforge/deploy/key.pem` |
+| Database | `$REPO/data/users.db` (SQLite, WAL) or Postgres via `CFORGE_PG_DSN` |
+| Certificate | `$REPO/deploy/cert.pem` |
+| Private key | `$REPO/deploy/key.pem` |
 | Bind address | `127.0.0.1` unless `CFORGE_BIND` is changed |
 
 `curl` against the TLS port needs `-k` because the certificate is generated locally and is not in a public trust store.
@@ -46,9 +46,12 @@ cforge
 ├── runtime
 │   ├── cforge_rt.h        public runtime API (what .cforge calls)
 │   ├── internal.h         Ctx, Arena, limits
-│   ├── server.c           epoll, HTTP, router, TLS, responses
+│   ├── server.c           epoll, HTTP, WebSocket /ws, router, TLS
 │   ├── json.c             create-user JSON parser
-│   └── db.c               SQLite prepared statements
+│   ├── db.c               SQLite / Postgres
+│   ├── pool.c             SQLite connection pool
+│   ├── redis.c            optional Redis invalidation
+│   └── log.c              stderr logging
 ├── build/cforge-users     native binary
 ├── build/users.gen.c      generated C (rebuilt by ./cforge build)
 ├── data/users.db          persistent users table
@@ -86,10 +89,12 @@ Accepted forms:
 ```text
 fn name(param: Type, ...) -> Type { ... }
 let name: Type = expr;
-if expr { ... } else { ... }
+name = expr;
+if expr { ... } else if expr { ... } else { ... }
 while expr { ... }
 return expr;
 name(args);
+extern fn runtime_sym(...) -> Type;
 ```
 
 Types that map straight onto C:
@@ -331,9 +336,9 @@ Response strings are escaped into the output buffer (`"`, `\`, and control chara
 
 This parser is not a general JSON library. It only understands the create-user body.
 
-## SQLite
+## SQLite and pool
 
-One connection for the process, opened in `app_listen` before the listen sockets. The schema:
+SQLite uses a **connection pool** (`CFORGE_DB_POOL`, default 4). Optional **Postgres** (`CFORGE_PG_DSN`) and **Redis** (`CFORGE_REDIS_URL`; `./cforge deploy` can start bundled Redis on `127.0.0.1:6379`). Schema:
 
 ```sql
 CREATE TABLE IF NOT EXISTS users (
@@ -353,7 +358,7 @@ DELETE FROM users WHERE id = ?1
 
 Parameters are bound. The SQL text is not concatenated with user input. `SQLITE_TRANSIENT` makes SQLite copy the name out of the arena during `INSERT`. `SELECT` copies the column into the arena before `sqlite3_reset`, because SQLite invalidates column pointers on reset.
 
-Each database call sets a checkout flag. After the handler returns, `cforge_db_release` resets every statement and clears bindings. The flag is the stand-in for “return this connection to the pool.” There is one connection, so a pool of many server connections is not implemented. A second request cannot overlap a statement because the thread is the only caller.
+Each `db_*` call checks out a pool connection. After the handler returns, `cforge_db_release` returns it to the pool and resets statements. One OS thread still means no overlapping handler work on the same connection slot.
 
 Text columns are copied. Integers are read into registers. That copy is required so the SQLite buffer can be reused for the next statement.
 
@@ -453,14 +458,14 @@ Content-Type: application/json
 
 ```ini
 [Service]
-ExecStart=/home/knight/Projects/cforge/build/cforge-users
-WorkingDirectory=/home/knight/Projects/cforge
+ExecStart=$REPO/build/cforge-users
+WorkingDirectory=$REPO
 Environment=PORT=8080
 Environment=TLS_PORT=8443
 Environment=CFORGE_BIND=127.0.0.1
-Environment=CFORGE_DB=/home/knight/Projects/cforge/data/users.db
-Environment=CFORGE_TLS_CERT=/home/knight/Projects/cforge/deploy/cert.pem
-Environment=CFORGE_TLS_KEY=/home/knight/Projects/cforge/deploy/key.pem
+Environment=CFORGE_DB=$REPO/data/users.db
+Environment=CFORGE_TLS_CERT=$REPO/deploy/cert.pem
+Environment=CFORGE_TLS_KEY=$REPO/deploy/key.pem
 Restart=on-failure
 ```
 
