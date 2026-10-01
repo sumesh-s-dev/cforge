@@ -1,0 +1,28 @@
+# CForge
+
+- [CForge](/docs): CForge language and backend specification
+- [Implementation status](/docs/status)
+- Learn
+  - [Introduction](/docs/learn/introduction)
+  - [Installation](/docs/learn/install)
+  - [First program](/docs/learn/first-program)
+  - [Language reference](/docs/learn/language)
+  - [Memory and slices](/docs/learn/memory)
+  - [Compiler](/docs/learn/compiler)
+  - [Runtime and HTTP](/docs/learn/runtime)
+  - [Machine backend](/docs/learn/machine)
+- Specification
+  - [CForge backend ecosystem specification](/docs/spec)
+  - [Language and runtime boundary](/docs/spec/boundary)
+  - [Networking and transport](/docs/spec/networking)
+  - [HTTP, routing, serialization, and async models](/docs/spec/http-async)
+  - [Memory, arenas, zero-copy, and concurrency](/docs/spec/memory)
+  - [Database, pooling, cache, and message queues](/docs/spec/database)
+  - [Libraries: packages, config, auth, errors, logging, observability](/docs/spec/libraries)
+  - [Toolchain, build, test, security, compiler and IR roadmap](/docs/spec/toolchain)
+  - [Production deployment, performance, and architecture comparison](/docs/spec/production)
+- Reference
+  - [Toolchain commands](/docs/reference/toolchain)
+  - [Runtime API](/docs/reference/runtime-api)
+  - [Environment variables](/docs/reference/environment)
+  - [Safety modes](/docs/reference/safety)

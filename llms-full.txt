@@ -1,0 +1,2081 @@
+# CForge (/docs)
+
+
+
+A low-level <strong>backend DSL</strong> and systems-language experiment: small typed language → C11 (plus experimental x86-64 ELF), with a bounded-memory HTTP/TLS/SQLite runtime on Linux. Not a general-purpose Rust/C competitor in 0.1.
+
+## Documentation [#documentation]
+
+|                 |                                                              |
+| --------------- | ------------------------------------------------------------ |
+| **Book**        | [Introduction](learn/introduction.html)                      |
+| **Design spec** | [Specification index](spec/index.html) — target architecture |
+| **Status**      | [Release 0.1 demo](status.html)                              |
+
+Handlers live in `.cforge` files. HTTP, JSON, TLS, and storage live in the **C runtime**, not in the language grammar.
+
+## Two compile paths [#two-compile-paths]
+
+| Path               | Command                        | Output                                    |
+| ------------------ | ------------------------------ | ----------------------------------------- |
+| **Server**         | `./cforge build`               | Native binary via generated C11 + runtime |
+| **Machine (demo)** | `./cforge machine prog.cforge` | x86-64 ELF without gcc                    |
+
+## Quick links [#quick-links]
+
+* [Introduction](learn/introduction.html) — philosophy and boundaries
+* [Installation](learn/install.html) — clone, build, test
+* [Language reference](learn/language.html) — implemented subset
+* [Implementation status](status.html) — shipped vs roadmap
+
+## Live demo [#live-demo]
+
+After [installation](learn/install.html):
+
+```text
+./cforge deploy
+curl http://127.0.0.1:8080/health
+```
+
+Repository: [github.com/sumesh-s-dev/cforge](https://github.com/sumesh-s-dev/cforge)
+
+
+# Compiler (/docs/learn/compiler)
+
+
+
+The **cforge** driver is a Python toolchain that lexes and parses `.cforge`, then lowers to one of two backends.
+
+## Server backend (default) [#server-backend-default]
+
+```text
+app/users.cforge
+    → build/users.gen.c
+    → cc -std=c11 -O2 -Wall -Wextra -Werror
+    → build/cforge-users
+         + runtime/server.c json.c db.c
+         + libsqlite3 libssl libcrypto
+```
+
+Entry point configured in `cforge.toml`:
+
+```toml
+[package]
+name = "users"
+entry = "app/users.cforge"
+```
+
+### Commands [#commands]
+
+| Command          | Action                       |
+| ---------------- | ---------------------------- |
+| `./cforge build` | Compile + link server binary |
+| `./cforge check` | Parse + generate C (no link) |
+| `./cforge run`   | Build and exec binary        |
+
+Runtime symbols (`app_get`, `db_*`, …) are declared in `runtime/cforge_rt.h` and implemented in C.
+
+## Machine backend [#machine-backend]
+
+```text
+mach/add.cforge
+    → cforge_mach.py
+    → x86-64 opcodes + ELF64 header
+    → executable (no gcc)
+```
+
+| Command                                 | Action                |
+| --------------------------------------- | --------------------- |
+| `./cforge machine file.cforge [-o out]` | Emit ELF              |
+| `./cforge machine-test`                 | Run add/expr fixtures |
+
+Limits: integer functions, six parameters, no `let`/`if` in machine slice yet (see status page).
+
+## Future native compiler [#future-native-compiler]
+
+The long-term architecture is **CForge IR → register allocation → ELF** for all programs, with the C path remaining a bootstrap backend. Release 0.1 ships both pipelines; only the machine path is gcc-free.
+
+## Diagnostics [#diagnostics]
+
+Errors are `compile error: line: message` on stderr with non-zero exit.
+
+
+# First program (/docs/learn/first-program)
+
+
+
+## Server path: register a route [#server-path-register-a-route]
+
+Edit `app/users.cforge` or add handlers in `main`:
+
+```c
+fn hello(ctx: *Ctx) -> i32 {
+    return ctx_text(ctx, 200, "hello");
+}
+
+fn main() -> i32 {
+    app_get("/hello", hello);
+    return app_listen(0);
+}
+```
+
+Build and run:
+
+```bash
+./cforge build
+PORT=9090 CFORGE_DB=data/users.db ./build/cforge-users
+curl http://127.0.0.1:9090/hello
+```
+
+`app_listen(0)` reads `PORT` (default `8080`).
+
+## Machine path: native ELF [#machine-path-native-elf]
+
+`mach/add.cforge`:
+
+```c
+fn add(a: u64, b: u64) -> u64 {
+    add r0, r1;
+    ret;
+}
+
+fn main() -> u64 {
+    return add(2, 3);
+}
+```
+
+```bash
+./cforge machine mach/add.cforge -o build/add
+./build/add
+echo $?   # 5
+```
+
+Or high-level return (lowered to add + ret):
+
+```c
+fn add(a: u64, b: u64) -> u64 {
+    return a + b;
+}
+```
+
+## Full stack example [#full-stack-example]
+
+The repository includes `POST /users`, `GET /users/:id`, and `DELETE /users/:id` against SQLite. See [Runtime & HTTP](runtime.html) and the repo `END-TO-END.md`.
+
+## Toolchain one-liner [#toolchain-one-liner]
+
+```bash
+./cforge all
+```
+
+Runs tests, local deploy, and `git push` when the tree is clean.
+
+
+# Installation (/docs/learn/install)
+
+
+
+## Requirements [#requirements]
+
+| Component               | Server path           | Machine path |
+| ----------------------- | --------------------- | ------------ |
+| Python 3                | yes (compiler driver) | yes          |
+| GCC or Clang            | yes                   | no           |
+| pkg-config + libsqlite3 | yes                   | no           |
+| OpenSSL dev libs        | yes (TLS)             | no           |
+| Linux x86-64            | yes                   | yes          |
+
+## Clone and verify [#clone-and-verify]
+
+```bash
+git clone git@github.com:sumesh-s-dev/cforge.git
+cd cforge
+./cforge test
+```
+
+You should see `ok 14 checks` and machine ELF tests.
+
+## Build the users service [#build-the-users-service]
+
+```bash
+./cforge build
+# → build/cforge-users
+```
+
+## Optional: systemd deploy (localhost) [#optional-systemd-deploy-localhost]
+
+```bash
+./cforge deploy
+curl http://127.0.0.1:8080/health
+```
+
+TLS on `https://127.0.0.1:8443` uses self-signed certs under `deploy/` (created on first deploy).
+
+## Publish documentation locally [#publish-documentation-locally]
+
+```bash
+python3 docs/build_docs.py
+# open docs/index.html in a browser
+```
+
+Public docs URL: **[https://sumesh-s-dev.github.io/cforge/](https://sumesh-s-dev.github.io/cforge/)** (deployed from the `gh-pages` branch on each push to `main`).
+
+In GitHub: **Settings → Pages → Source: Deploy from branch `gh-pages` / root** (set once after the first successful Pages workflow).
+
+## Environment overview [#environment-overview]
+
+See [Environment variables](../reference/environment.html) for `CFORGE_*` and `PORT`.
+
+
+# Introduction (/docs/learn/introduction)
+
+
+
+CForge is a **backend DSL and systems-language experiment** (release 0.1). The runnable piece is a tiny typed language plus a **C runtime** that owns networking, HTTP, TLS, JSON parsing, and storage — handlers express policy; the runtime owns mechanism.
+
+We are **not** claiming memory safety like Rust: `Slice`/`Ctx` lifetime rules are documented and partially checked, but **`@safe` is not enforced yet**. See [Safety modes](../reference/safety.html).
+
+## What we optimize for (direction C) [#what-we-optimize-for-direction-c]
+
+A **backend systems niche**: small handler code, predictable request memory (arenas + slabs), integer error codes, and a stable `int32_t handler(Ctx *)` ABI — not a full general-purpose language yet.
+
+## Design principles [#design-principles]
+
+* **No hidden work** — allocation, syscalls, and buffer lifetimes are visible.
+* **Libraries, not language features** — HTTP, JSON, TLS, and SQL are runtime code you link, not syntax built into the compiler.
+* **Two backends** — rapid iteration through C codegen; native ELF for registers and syscalls on x86-64.
+* **Explicit memory** — connection buffers, request arenas, and `Slice` views; reset arenas per request instead of GC.
+
+## What CForge is not [#what-cforge-is-not]
+
+CForge is **not** a memory-safe language like Rust. It does **not** replace PostgreSQL, Kubernetes, or a full package ecosystem in release 0.1. See [Implementation status](../status.html) for the exact matrix.
+
+## Architecture [#architecture]
+
+```text
+Application (.cforge)
+        ↓
+Runtime API (Slice, Ctx, app_listen, db_*)
+        ↓
+C runtime (epoll, HTTP, SQLite, OpenSSL)
+        ↓
+Linux kernel
+```
+
+The [machine backend](machine.html) bypasses C codegen for small programs and emits ELF directly.
+
+## Comparison [#comparison]
+
+|                | CForge                      | C          | Rust     |
+| -------------- | --------------------------- | ---------- | -------- |
+| Control        | High                        | High       | High     |
+| Hidden runtime | None required               | None       | Minimal  |
+| Memory safety  | Programmer + optional modes | Programmer | Compiler |
+| Backend in 0.1 | C + partial native          | Native     | Native   |
+
+## Next steps [#next-steps]
+
+[Install CForge](install.html) and write your [first program](first-program.html).
+
+
+# Language reference (/docs/learn/language)
+
+
+
+Release **0.1** — implemented subset. Syntax outside this list is a compile error.
+
+## Lexical [#lexical]
+
+* Line comments: `// ...`
+* Identifiers: `[A-Za-z_][A-Za-z0-9_]*`
+* String literals: `"..."` with escapes `\n`, `\t`, `\r`, `\"`, `\\`, `\/`
+* Integer literals: decimal `u64` / `i32` range per use site
+
+## Types [#types]
+
+| CForge                                  | C (server backend)              |
+| --------------------------------------- | ------------------------------- |
+| `i32`, `u32`, `i64`, `u64`, `u16`, `u8` | same-width integers             |
+| `bool`                                  | `int32_t` (0 / non-zero)        |
+| `Slice`                                 | `{ uint8_t *ptr; size_t len; }` |
+| `Ctx`                                   | opaque service context          |
+| `*T`                                    | pointer                         |
+
+`Slice` copies two words (pointer + length). It does not allocate.
+
+## Functions [#functions]
+
+```c
+fn name(param: Type, ...) -> ReturnType {
+    ...
+}
+```
+
+`main` must exist. It is emitted as `cforge_main` with a C `main` wrapper.
+
+## Statements [#statements]
+
+| Statement  | Example                                    |
+| ---------- | ------------------------------------------ |
+| let        | `let x: u64 = 0;`                          |
+| assign     | `x = x + 1;`                               |
+| return     | `return ctx_status(ctx, 404);`             |
+| if / else  | `if x != 0 { ... } else { ... }`           |
+| while      | `while cond { ... }`                       |
+| expression | `db_get_user(ctx, id, &oid, &name, &age);` |
+
+## Expressions [#expressions]
+
+* Literals, identifiers, calls `f(a, b)`
+* Field access on `Slice`: `.len`, `.ptr`
+* Operators: `+ - * / % == != < > <= >=`, logical `&&` `||`, unary `&`, `*`, `-`, `!`
+* Address-of: `&id` for pointer parameters
+
+## Machine-only syntax [#machine-only-syntax]
+
+When using `./cforge machine`, raw instructions are allowed in function bodies:
+
+```c
+add r0, r1;
+mov r2, 42;
+syscall;
+ret;
+```
+
+Registers **r0–r7** map to System V AMD64 argument registers. **`ret`** moves r0 → rax.
+
+The server backend (`./cforge build`) rejects raw instructions — use the [machine backend](machine.html).
+
+## Not in 0.1 [#not-in-01]
+
+* generics, modules, `async fn`, comptime derives
+* operator overloading, enums, traits
+* full `@safe` / `@checked` enforcement (`@name` warns and is ignored)
+
+## Extern (runtime symbols) [#extern-runtime-symbols]
+
+Runtime functions live in **`app/runtime.cforge`** as `extern fn` declarations (implemented in C). Handlers in `app/users.cforge` call them without editing the compiler.
+
+```c
+extern fn db_get_user(ctx: *Ctx, id: u64, out_id: *u64, name: *Slice, age: *u32) -> i32;
+```
+
+## Struct types [#struct-types]
+
+```c
+struct CreateUser {
+    name: Slice;
+    age: u32;
+}
+```
+
+Structs lower to C `typedef struct` in generated code. Fields use types from the table above.
+
+Roadmap: [Implementation status](../status.html).
+
+
+# Machine backend (/docs/learn/machine)
+
+
+
+Direct **x86-64** code generation for freestanding Linux ELF executables.
+
+## Register file [#register-file]
+
+| CForge | Hardware (SysV args) |
+| ------ | -------------------- |
+| r0     | rdi                  |
+| r1     | rsi                  |
+| r2     | rdx                  |
+| r3     | rcx                  |
+| r4     | r8                   |
+| r5     | r9                   |
+| r6     | r10                  |
+| r7     | r11                  |
+
+Return value: **r0** copied to **rax** before `ret`.
+
+## Instructions (0.1) [#instructions-01]
+
+| Mnemonic      | Effect                |
+| ------------- | --------------------- |
+| `mov rD, rS`  | move                  |
+| `mov rD, imm` | 32-bit immediate      |
+| `add rD, rS`  | add                   |
+| `sub rD, rS`  | subtract              |
+| `syscall`     | `syscall` instruction |
+| `ret`         | exit function         |
+
+## Startup [#startup]
+
+Emitted `_start` calls `main`, moves result to rdi, `syscall` exit (60).
+
+## Example [#example]
+
+```c
+fn main() -> u64 {
+    return add(40, 2);
+}
+
+fn add(a: u64, b: u64) -> u64 {
+    add r0, r1;
+    ret;
+}
+```
+
+```bash
+./cforge machine mach/expr.cforge -o /tmp/expr && /tmp/expr; echo $?
+# 42
+```
+
+## Relation to server backend [#relation-to-server-backend]
+
+The HTTP server does **not** use the machine backend yet. It uses C codegen + runtime. Convergence goal: link runtime as native object code compiled from CForge IR.
+
+## Platform [#platform]
+
+Linux x86-64 only in 0.1. ARM64 planned as a second Machine IR target.
+
+
+# Memory and slices (/docs/learn/memory)
+
+
+
+CForge services use **fixed buffers** and **request arenas**. There is no garbage collector on the hot path.
+
+## Per-connection layout [#per-connection-layout]
+
+```text
+Connection
+ ├── in_buf     (read buffer, HTTP + body)
+ ├── out_buf    (response bytes)
+ └── arena      (bump allocator, reset each request)
+```
+
+Default sizes are documented in `runtime/internal.h` (`CFORGE_MAX_HEADER`, `CFORGE_MAX_BODY`, `CFORGE_ARENA`, etc.).
+
+## Request lifetime [#request-lifetime]
+
+```text
+read bytes → parse HTTP → handler runs
+    → slices point into in_buf or arena
+    → response written to out_buf
+    → arena.reset()
+    → db checkout released
+```
+
+Anything allocated in the **arena** dies at `arena.reset()`. Do not store arena `Slice` values in globals.
+
+## Slice rules [#slice-rules]
+
+| Operation                   | Allocates?                          |
+| --------------------------- | ----------------------------------- |
+| `Slice` from string literal | No (static bytes)                   |
+| JSON string into arena      | Yes (arena bump)                    |
+| SQL text column into arena  | Yes (copy for reuse of wire buffer) |
+| `ctx_json_*` output         | Written to `out_buf`                |
+
+Database functions copy text into `ctx->arena` because the SQLite statement buffer is reused.
+
+## Stack [#stack]
+
+Locals (`let x: u64 = 0`) live on the C stack for the duration of the handler call.
+
+## Safety modes (planned) [#safety-modes-planned]
+
+See [Safety modes](../reference/safety.html): `@unsafe` and `@checked` are accepted and stripped by the lexer; `@safe` compile mode is planned — not enforced beyond explicit coding discipline.
+
+## Further reading [#further-reading]
+
+Repository: `END-TO-END.md` — full request/response lifecycle.
+
+
+# Runtime and HTTP (/docs/learn/runtime)
+
+
+
+The **runtime** is a C library: epoll event loop, HTTP/1.1 parser, router, JSON helper, SQLite access, optional TLS 1.3 (OpenSSL).
+
+Application code never calls `epoll` directly in 0.1 — it calls `app_listen` and handler helpers.
+
+## Starting the server [#starting-the-server]
+
+```c
+fn main() -> i32 {
+    app_get("/health", health);
+    app_post("/users", post_user);
+    return app_listen(0);
+}
+```
+
+Routes are registered at startup (fixed table, max 64 routes). Parameters: `/users/:id` → `ctx_param_u64(ctx, 0, &id)`.
+
+## Handler context [#handler-context]
+
+Handlers receive `*Ctx` with:
+
+* parsed path and body as `Slice`
+* request arena for decoded strings
+* output buffer via `ctx_json_*`, `ctx_text`, `ctx_status`
+
+## HTTP features (0.1) [#http-features-01]
+
+| Feature                | Supported |
+| ---------------------- | --------- |
+| GET POST DELETE        | yes       |
+| HTTP/1.0 / 1.1         | yes       |
+| Keep-alive, pipelining | yes       |
+| Content-Length bodies  | yes       |
+| Chunked request bodies | no (501)  |
+| HTTP/2 / 3             | no        |
+
+## Backpressure [#backpressure]
+
+* Full connection slab → stop accepting
+* Full read buffer → drop EPOLLIN
+* Write EAGAIN → EPOLLOUT
+
+## TLS [#tls]
+
+When `CFORGE_TLS_CERT` and `CFORGE_TLS_KEY` are set, a second listener serves TLS 1.3 only.
+
+## Full specification [#full-specification]
+
+See repository `END-TO-END.md` for byte-level lifecycle, error codes, and shutdown (`SIGTERM`).
+
+## Runtime API [#runtime-api]
+
+[Runtime API reference](../reference/runtime-api.html)
+
+
+# Environment variables (/docs/reference/environment)
+
+
+
+Read at process start by the runtime (`app_listen`).
+
+| Variable           | Default         | Meaning                                                                           |
+| ------------------ | --------------- | --------------------------------------------------------------------------------- |
+| `PORT`             | `8080`          | HTTP listen port when `app_listen(0)`                                             |
+| `TLS_PORT`         | `8443`          | TLS port if certs set                                                             |
+| `CFORGE_BIND`      | `127.0.0.1`     | IPv4 bind address                                                                 |
+| `CFORGE_DB`        | `data/users.db` | SQLite database path (ignored when Postgres is active)                            |
+| `CFORGE_PG_DSN`    | unset           | Optional Postgres libpq DSN (e.g. `postgres://user:pass@host/db?sslmode=disable`) |
+| `CFORGE_REDIS_URL` | unset           | Optional Redis (`redis://host:6379`) for cache key invalidation                   |
+| `CFORGE_TLS_CERT`  | unset           | PEM certificate path                                                              |
+| `CFORGE_TLS_KEY`   | unset           | PEM private key path                                                              |
+| `CFORGE_MAX_CONNS` | `128`           | Connection slab size (1–4096)                                                     |
+| `CFORGE_IDLE_MS`   | `30000`         | Close idle connections after this many ms                                         |
+| `CFORGE_DB_POOL`   | `4`             | SQLite connections in pool (1–8)                                                  |
+
+Parent directory of `CFORGE_DB` is created if missing.
+
+## systemd example [#systemd-example]
+
+See `deploy/cforge-users.service.example` — replace `__CFORGE_ROOT__` with clone path.
+
+## Security [#security]
+
+Default bind is localhost. Use `CFORGE_BIND=0.0.0.0` only with firewall rules and real TLS certificates.
+
+Private keys are gitignored; generate with `./cforge deploy` or OpenSSL.
+
+
+# Runtime API (/docs/reference/runtime-api)
+
+
+
+Declared in `runtime/cforge_rt.h`. Implemented in C. Link automatically when building via `./cforge build`.
+
+## Slice [#slice]
+
+```c
+typedef struct Slice {
+    uint8_t *ptr;
+    size_t len;
+} Slice;
+```
+
+`slice_empty()` → zero-length slice.
+
+## Context [#context]
+
+Opaque `Ctx *`. Handlers use runtime helpers only.
+
+## HTTP / response [#http--response]
+
+| Function                                  | Purpose                         |
+| ----------------------------------------- | ------------------------------- |
+| `ctx_status(ctx, code)`                   | Status, empty body              |
+| `ctx_text(ctx, code, body)`               | Plain text body                 |
+| `ctx_problem(ctx, code, title, detail)`   | `application/problem+json` body |
+| `ctx_json_user(ctx, code, id, name, age)` | JSON user object                |
+| `ctx_json_id(ctx, code, id)`              | JSON `{"id":N}`                 |
+| `ctx_metrics(ctx)`                        | Prometheus-style text metrics   |
+| `ctx_param_u64(ctx, index, &out)`         | Parse `:id` route param         |
+
+Return `0` on success, non-zero on parse failure.
+
+## JSON [#json]
+
+| Function                              | Purpose                       |
+| ------------------------------------- | ----------------------------- |
+| `json_parse_create(ctx, &name, &age)` | Parse POST body `{name, age}` |
+
+## Database (SQLite or Postgres via env) [#database-sqlite-or-postgres-via-env]
+
+| Function                                  | Returns                     |
+| ----------------------------------------- | --------------------------- |
+| `db_get_user(ctx, id, &oid, &name, &age)` | 0 ok, 1 not found, -1 error |
+| `db_insert_user(ctx, name, age, &id)`     | 0 ok, -1 error              |
+| `db_delete_user(ctx, id)`                 | 0 ok, 1 not found, -1 error |
+
+Backend selected by `CFORGE_PG_DSN` (libpq) or `CFORGE_DB` (SQLite pool). Metrics include `db_backend`.
+
+## Server [#server]
+
+| Function               | Purpose                               |
+| ---------------------- | ------------------------------------- |
+| `app_get(path, fn)`    | Register GET route                    |
+| `app_post(path, fn)`   | Register POST route                   |
+| `app_delete(path, fn)` | Register DELETE route                 |
+| `app_listen(port)`     | Block in event loop; `0` → env `PORT` |
+
+`GET /ws` WebSocket echo is implemented in the runtime (not via `app_*`).
+
+Handler type: `int32_t handler(Ctx *ctx)`.
+
+## Errors [#errors]
+
+No exceptions. Use integer return codes and branch in the handler.
+
+
+# Safety modes (/docs/reference/safety)
+
+
+
+CForge prioritizes **control** over automatic memory safety.
+
+## Release 0.1 [#release-01]
+
+| Mode                                           | Status                                      |
+| ---------------------------------------------- | ------------------------------------------- |
+| Explicit pointers and slices                   | **Implemented**                             |
+| Request arena reset                            | **Implemented**                             |
+| `@unsafe` / `@checked` attributes on functions | **Warned and ignored** (no enforcement yet) |
+| `@safe` mode                                   | **Planned**                                 |
+
+## Planned compiler modes [#planned-compiler-modes]
+
+### @unsafe (default) [#unsafe-default]
+
+No extra checks. Programmer responsible for lifetimes, data races, and use-after-free.
+
+### @checked (debug / test builds) [#checked-debug--test-builds]
+
+* Slice index bounds checks where indexing is added to the language
+* Optional arena generation counter to trap use-after-reset in tests
+* Sanitizer-friendly build profiles (ASan / UBSan / TSan when linked)
+
+### @safe (application tier lint) [#safe-application-tier-lint]
+
+* Static checks for storing request `Slice` into globals
+* Stricter parser limits enforced at compile time
+
+These modes do **not** make CForge Rust. They reduce obvious footguns without a borrow checker.
+
+## What we do not promise [#what-we-do-not-promise]
+
+* Freedom from use-after-free or data races in `@unsafe`
+* Cryptographic correctness of hand-written Forge crypto (use audited libraries via runtime)
+
+See [Introduction](../learn/introduction.html) for philosophy.
+
+
+# Toolchain commands (/docs/reference/toolchain)
+
+
+
+All commands run from the repository root via `./cforge`.
+
+| Command                    | Description                                                                      |
+| -------------------------- | -------------------------------------------------------------------------------- |
+| `build`                    | Server backend: `.cforge` → C → `build/cforge-users`                             |
+| `check`                    | Parse and emit `build/users.gen.c` without linking                               |
+| `run`                      | Build and replace process with server binary                                     |
+| `test`                     | Integration tests (HTTP + TLS + WebSocket + machine ELF)                         |
+| `deploy`                   | Build, install systemd user unit, restart, health check                          |
+| `e2e`                      | `test` + `deploy` + users API smoke on `:8080`                                   |
+| `everything`               | `check` + `package` + `e2e` + docs-site build + `deploy-docker` if Docker exists |
+| `deploy-docker`            | `docker compose` Postgres + Redis + app on `:8080`                               |
+| `status`                   | GET `/health` and `/metrics` on port 8080                                        |
+| `all`                      | `test` + `deploy` + `status` + git publish script                                |
+| `package`                  | Write `cforge.lock` source fingerprints                                          |
+| `machine <file> [-o path]` | Native ELF backend                                                               |
+| `machine-test`             | Verify mach/add and mach/expr exit codes                                         |
+
+## Scripts [#scripts]
+
+| Script                      | Purpose                                |
+| --------------------------- | -------------------------------------- |
+| `scripts/publish-github.sh` | Push to github.com/sumesh-s-dev/cforge |
+| `scripts/do-all.sh`         | Same as `cforge all`                   |
+| `docs/build_docs.py`        | Regenerate static HTML docs            |
+
+## CI [#ci]
+
+GitHub Actions `.github/workflows/ci.yml`: `./cforge test`, machine tests, Postgres smoke job, docs build job.
+
+Pages deploy: `.github/workflows/pages.yml` → [https://sumesh-s-dev.github.io/cforge/](https://sumesh-s-dev.github.io/cforge/)
+
+
+# Language and runtime boundary (/docs/spec/boundary)
+
+
+
+The CForge backend ecosystem depends on a **hard boundary** between what the `.cforge` compiler understands and what the linked runtime provides. This separation keeps the language small, makes the runtime replaceable, and allows the same handler source to target generated C or (eventually) native code with identical ABI symbols.
+
+## What the language owns [#what-the-language-owns]
+
+**Shipped (0.1):** The `cforge` driver lexes and parses a statement-oriented subset: functions, `let`, `if`/`while`, `return`, and calls. Types map directly to C11 scalars and two runtime-visible structs:
+
+| CForge type                                     | ABI shape                                   |
+| ----------------------------------------------- | ------------------------------------------- |
+| `i32`, `u32`, `i64`, `u64`, `u16`, `u8`, `bool` | Fixed-width integers / `int32_t` for `bool` |
+| `Slice`                                         | `{ uint8_t *ptr; size_t len; }`             |
+| `*Ctx`                                          | Opaque request context                      |
+| `*u64`, `*u32`, `*Slice`                        | Out-parameters and mutable views            |
+
+`Slice` is a **non-owning view**. Copying a `Slice` copies pointer and length only. String literals become static `Slice` values pointing at read-only bytes. Handlers must not retain `Slice` pointers past the request unless documentation guarantees a longer lifetime (database helpers copy into the request arena for this reason).
+
+The entry `main` lowers to `cforge_main`; the generated translation unit adds a C `main` that registers routes and calls `app_listen`. Application functions are `static` in the generated file and passed as `CForgeFn` pointers.
+
+**Planned:** `struct` declarations at module scope, generics for containers, `async fn` with state-machine lowering, and comptime validation of route tables. None of these change the rule that **syscalls and protocol parsing stay out of the language**.
+
+## What the runtime owns [#what-the-runtime-owns]
+
+Everything that touches the outside world:
+
+* Socket creation, `bind`, `listen`, `accept4`, non-blocking mode, `TCP_NODELAY`, keep-alive
+* `epoll_wait` loop, connection slot table, idle scanning, accept pause under load
+* HTTP request parsing, response framing, status codes, `Allow` headers
+* TLS 1.3 handshake and record I/O via OpenSSL
+* JSON parsers and response encoders scoped to known schemas
+* SQLite connection, prepared statements, WAL pragmas, busy timeout
+* Environment-based configuration (`PORT`, `CFORGE_DB`, TLS paths, limits)
+* Process signals, graceful shutdown, stderr logging
+
+Application code chooses **which routes exist** and **which status codes and DB calls** to make. It does not choose buffer sizes, epoll user-data encoding, or SSL context flags.
+
+## The `Ctx` contract [#the-ctx-contract]
+
+`Ctx` is stack-allocated per request inside the runtime. Handlers receive `*Ctx` only. Fields visible through API functions include:
+
+* HTTP method and path as `Slice` (path without query string for routing)
+* Request body as `Slice` (bounded by `CFORGE_MAX_BODY`)
+* Output buffer cursor managed by `ctx_text`, `ctx_json_*`, `ctx_status`
+* Up to four captured path parameters (`:id` style), parsed via `ctx_param_u64`
+
+Handlers must not store `Ctx` pointers beyond the synchronous return of `CForgeFn`. **Planned** async models may extend `Ctx` with a generation token or arena id so resumed tasks cannot write into recycled slots.
+
+## Error and control-flow policy [#error-and-control-flow-policy]
+
+There is no exception unwinding. Functions return `int32_t`:
+
+| Pattern | Meaning                                        |
+| ------- | ---------------------------------------------- |
+| `0`     | Success                                        |
+| `1`     | Expected domain miss (e.g. row not found)      |
+| `-1`    | Parse failure, I/O error, constraint violation |
+
+HTTP mapping is application responsibility: `404` for missing users, `400` for bad JSON, `503` when `db_*` returns `-1`. The runtime may emit its own `400`/`413`/`431` before a handler runs when HTTP is malformed.
+
+This policy keeps generated C simple and makes FFI predictable: every exported runtime function uses the same width and sign convention.
+
+## Route registration ABI [#route-registration-abi]
+
+Before `app_listen`, the generated `cforge_main` calls:
+
+```text
+app_get(path_slice, handler_fn);
+app_post(path_slice, handler_fn);
+app_delete(path_slice, handler_fn);
+```
+
+Paths are copied at registration time (malloc at startup only). Lookup at request time is linear scan with exact match or single trailing `:param` segment—**Shipped (0.1)**. **Planned:** radix tree or perfect hash for large tables, method bitmaps per path, middleware chains stored as function pointer arrays.
+
+Handlers have type `int32_t (*)(Ctx *)`. The runtime never calls back into the language except through this pointer.
+
+## FFI: C runtime and foreign libraries [#ffi-c-runtime-and-foreign-libraries]
+
+**Today:** Generated C includes `cforge_rt.h` and links `server.c`, `json.c`, `db.c` with `libsqlite3`, `libssl`, `libcrypto`, `pthread`. New runtime capabilities are added as C functions and whitelisted in the compiler’s builtin call table.
+
+**Planned FFI layers:**
+
+1. **Stable C ABI** — `CFORGE_API` functions documented in reference; versioned struct sizes for `Ctx` extensions.
+2. **Dynamic plugins** — `.so` loaded at startup registering routes or background jobs (explicit opt-in; no runtime `dlopen` in 0.1).
+3. **Foreign DB/cache clients** — PostgreSQL libpq or custom wire codec in C++; handlers still see `db_*`-style integers.
+4. **Rust or Zig shims** — thin wrappers exporting `extern "C"` symbols matching `CForgeFn` and allocator rules.
+
+FFI code must respect **arena lifetimes**: any `Slice` handed to a handler must either point at static data, connection `in[]`, or the request arena until reset.
+
+## Machine backend boundary [#machine-backend-boundary]
+
+The [machine backend](../learn/machine.html) compiles a different subset to x86-64 ELF without linking the HTTP runtime. Registers `r0`–`r7` map to System V argument registers. Syscalls are explicit. There is no `Ctx` or `app_listen` on this path—it proves the front-end can target non-C ABIs.
+
+Long-term, shared middle-end IR would feed both C codegen and machine codegen; handlers for microservices remain on the C server path until the IR backend can link a minimal runtime.
+
+## Anti-patterns at the boundary [#anti-patterns-at-the-boundary]
+
+* Parsing HTTP or SQL in `.cforge` — duplicates runtime, breaks size limits.
+* Calling `malloc` from handlers — violates allocation invariants; use runtime helpers that draw from the arena.
+* Holding `Slice` from `db_get_user` after return — use-before-free when the arena resets.
+* Blocking syscalls in handlers — stalls the single-threaded epoll loop in 0.1; **planned** worker pool offloads such calls.
+
+## Summary [#summary]
+
+The boundary is intentional: **express policy in CForge, express mechanism in C**. Extending the ecosystem means growing `cforge_rt.h` and keeping the language dumb about wire formats. See [http-async.html](http-async.html) for protocol layer detail and [memory.html](memory.html) for ownership rules.
+
+
+# Database, pooling, cache, and message queues (/docs/spec/database)
+
+
+
+Persistence and asynchronous messaging in the CForge ecosystem are **runtime libraries**, not language builtins. Release 0.1 ships SQLite for the users service; this spec defines the target architecture for connection pools, external databases, in-memory cache, and queue integrations.
+
+## SQLite (shipped) [#sqlite-shipped]
+
+**Shipped (0.1):** SQLite pool (`CFORGE_DB_POOL`, default 4) of connections with prepared statements. Same schema:
+
+```sql
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    age INTEGER NOT NULL
+);
+```
+
+Pragmas at open: `journal_mode=WAL`, `synchronous=NORMAL`. Three prepared statements:
+
+```sql
+INSERT INTO users(name, age) VALUES (?1, ?2)
+SELECT id, name, age FROM users WHERE id = ?1
+DELETE FROM users WHERE id = ?1
+```
+
+Parameters are bound; SQL text is never concatenated with user input. `SQLITE_TRANSIENT` on insert copies name bytes out of the request arena. `SELECT` copies TEXT into the arena before `sqlite3_reset`.
+
+**Checkout discipline:** Each `db_*` call checks out a pool connection. After the handler returns, `cforge_db_release` returns it to the pool and resets statements.
+
+**Optional Postgres:** When `CFORGE_PG_DSN` is set and the binary is built with libpq, the same `db_*` API uses PostgreSQL (`users` table, `BIGSERIAL` id). Metrics report `db_backend postgres` or `sqlite`.
+
+**Optional Redis:** When `CFORGE_REDIS_URL` is set, the runtime connects and `DEL user:{id}` on insert/delete (cache invalidation). Metrics report `redis_backend connected` or `disabled`.
+
+Integer API:
+
+| Return | Meaning                      |
+| ------ | ---------------------------- |
+| `0`    | Success                      |
+| `1`    | Row missing (`GET`/`DELETE`) |
+| `-1`   | SQLite or bind error         |
+
+Handlers map `-1` to `503` and increment `db_errors` in metrics.
+
+`busy_timeout` is 1000 ms for contention with external tools opening the same file.
+
+## Connection pool (PostgreSQL / MySQL target) [#connection-pool-postgresql--mysql-target]
+
+Target shape for additional pool features on Postgres:
+
+```text
+Pool {
+  min, max connections
+  acquire(timeout) → PooledConn
+  release(conn) → return to idle or destroy if broken
+}
+```
+
+Rules:
+
+* **Never** hold a pooled connection across `async` yield unless Model B explicitly pins conn to continuation
+* One statement cache per connection; reset on release
+* Health check query on idle timeout
+* Metrics: `pool_wait_ms`, `pool_active`, `pool_idle`, `pool_create_failures`
+
+Handlers keep the integer error policy; `db_get_user` becomes a thin wrapper over `SELECT` with dialect-specific types. Migrations run from toolchain (`cforge migrate`) applying versioned SQL files—not from handlers.
+
+## PostgreSQL wire client [#postgresql-wire-client]
+
+**Shipped:** libpq via `CFORGE_PG_DSN` on the reactor thread (same sync model as 0.1).
+
+Design options for future scaling:
+
+| Approach                         | Pros                        | Cons                       |
+| -------------------------------- | --------------------------- | -------------------------- |
+| libpq                            | Battle-tested, TLS built-in | C dependency, blocking API |
+| Custom frontend/backend protocol | Full control                | Large implementation       |
+| Embedded via CGO/Rust shim       | Reuse ecosystem             | FFI boundary discipline    |
+
+CForge favors **libpq in worker threads** under Model B, with results marshaled into arena `Slice` on the reactor thread before handler return in hybrid mode.
+
+## Transaction boundaries [#transaction-boundaries]
+
+**0.1:** Each statement auto-commits. **Planned:** `db_tx_begin(ctx)` / `db_tx_commit` / `db_tx_rollback` storing tx state in `Ctx` extensions, forbidden across keep-alive requests unless explicitly bound to a session id.
+
+Isolation default: `READ COMMITTED` for OLTP handlers; serializable for financial slices via opt-in.
+
+## In-memory and distributed cache [#in-memory-and-distributed-cache]
+
+Layers:
+
+1. **Request arena** — not a cache; discard every request
+2. **Process LRU** — fixed-size slab for hot keys (user by id, JWKS)
+3. **Redis** — shared cache and rate-limit counters
+4. **CDN** — HTTP cache headers for static content
+
+Cache API sketch:
+
+```text
+cache_get(ctx, key_slice, value_out_slice) → hit/miss
+cache_set(ctx, key, value, ttl_sec) → status
+```
+
+Serialization format for values is caller-chosen (JSON blob, msgpack). **Stampede protection:** single-flight lock per key in process LRU; Redis `SET NX` for cross-node.
+
+Invalidation: explicit `cache_del` on write paths (`POST`/`DELETE` users); **shipped** Redis `DEL user:{id}` when `CFORGE_REDIS_URL` is set; **planned** pub/sub channel `cache:invalidate` for multi-instance deployments.
+
+## Message queues (planned) [#message-queues-planned]
+
+Use cases: outbox pattern for email, audit log shipping, search index updates, decoupled workers.
+
+| System        | Pattern                    | CForge integration                                |
+| ------------- | -------------------------- | ------------------------------------------------- |
+| Kafka         | Log-based, consumer groups | Background thread + batch publish                 |
+| NATS          | Lightweight pub/sub        | Fire-and-forget sidecar goroutine equivalent in C |
+| RabbitMQ      | AMQP routing               | Worker pool consumers                             |
+| Redis Streams | Simple queue               | Same client as cache                              |
+
+**Outbox table** (relational):
+
+```sql
+CREATE TABLE outbox (
+  id BIGSERIAL PRIMARY KEY,
+  payload BYTEA NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL,
+  published_at TIMESTAMPTZ
+);
+```
+
+Handler inserts user row and outbox row in one transaction; relay process publishes and marks `published_at`. This preserves **at-least-once** delivery without dual-write races.
+
+Handlers should not block on publish; Model B workers drain outbox. Metrics: `outbox_lag_seconds`, `publish_failures`.
+
+## Read replicas and routing [#read-replicas-and-routing]
+
+**Planned:** `db_read` vs `db_write` pool handles; sticky primary for session consistency. Handlers remain unaware if the runtime routes `SELECT` to replica based on `Ctx` read-only flag set by middleware.
+
+## Backup and migrations [#backup-and-migrations]
+
+Operational requirements:
+
+* SQLite: file snapshot when process stopped or `VACUUM INTO`
+* PostgreSQL: WAL archiving, PITR
+* Migrations versioned in `migrations/` applied by `cforge migrate` with advisory lock
+
+## Security [#security]
+
+* Least-privilege DB roles per service binary
+* No dynamic SQL from handler strings
+* Encrypt connections (TLS to Postgres)
+* Secrets from environment or vault sidecar, not committed files
+
+## 0.1 vs target summary [#01-vs-target-summary]
+
+| Capability | 0.1                           | Target                   |
+| ---------- | ----------------------------- | ------------------------ |
+| Engine     | SQLite file or Postgres (DSN) | Postgres primary         |
+| Pool       | SQLite pool + libpq conn      | Sized pool + health      |
+| Cache      | Redis invalidation (optional) | LRU + Redis read-through |
+| Queues     | None                          | Outbox + Kafka/NATS      |
+| Migrations | Embedded `CREATE TABLE`       | Toolchain migrator       |
+
+See [http-async.html](http-async.html) for handler error mapping and [production.html](production.html) for SLO impact of pool wait time.
+
+
+# HTTP, routing, serialization, and async models (/docs/spec/http-async)
+
+
+
+This document covers application-layer protocols in the CForge backend design: HTTP family semantics, the reference router, JSON and broader serialization, and two async architectures (**Model A** synchronous reactor vs **Model B** executor with continuations).
+
+## HTTP/1.1 (shipped) [#http11-shipped]
+
+The 0.1 parser is a byte scanner over the connection `in[]` buffer. It supports:
+
+* Methods: `GET`, `POST`, `DELETE`
+* Versions: `HTTP/1.0`, `HTTP/1.1`
+* `Content-Length` bodies up to 65536 bytes
+* Required `Host` on HTTP/1.1
+* `Connection: close` and HTTP/1.0 keep-alive negotiation
+* Query strings stripped before route lookup (`/users/1?trace=1` → `/users/1`)
+* Pipelined requests already present in the buffer
+* One trailing path parameter (`/users/:id`)
+
+Rejected conditions map to explicit statuses: `400` bad line, `413` oversized body, `431` header limits, `501` chunked `Transfer-Encoding`, `417` `Expect`, `505` unknown HTTP version, `405` wrong method with `Allow`, `404` no route.
+
+Responses are assembled entirely in `out[]` before socket write: status line, `Content-Type`, `Content-Length`, `Connection`, `Server: cforge`, body. No chunked encoder in 0.1; `204` uses zero body length.
+
+Keep-alive defaults: HTTP/1.1 persistent unless `Connection: close`; HTTP/1.0 closes unless client requests keep-alive.
+
+## HTTP/2 and HTTP/3 (planned) [#http2-and-http3-planned]
+
+| Feature            | HTTP/2 plan                        | HTTP/3 plan               |
+| ------------------ | ---------------------------------- | ------------------------- |
+| Multiplexing       | Stream per request on one TCP conn | QUIC streams              |
+| Header compression | HPACK static/dynamic tables        | QPACK                     |
+| Server push        | Disabled by default                | N/A                       |
+| Integration        | ALPN `h2` after TLS                | UDP listener + QUIC stack |
+
+Handlers remain `CForgeFn`; the runtime maps stream id → synthetic `Ctx` with per-stream arena slices carved from a connection-level pool. Flow control backpressure surfaces as “pause read on stream” rather than global accept pause.
+
+## Router [#router]
+
+**Shipped (0.1):** Routes registered at startup via `app_get` / `app_post` / `app_delete`. Patterns stored as malloc’d strings once; lookup is O(routes) with:
+
+* Exact `memcmp` match on path length and bytes
+* Optional single `:name` suffix matching one path segment without `/`
+
+`ctx_param_u64(ctx, 0, &id)` parses decimal `u64`, rejecting empty, leading zeros, non-digits, overflow.
+
+First matching method wins. Path match with wrong method yields `405` and `Allow` listing methods registered for that path pattern.
+
+**Planned extensions:**
+
+* Middleware stack: `app_use(fn)` running before route handlers (auth, request id)
+* Host-based virtual hosts and mount prefixes
+* Static file route kind with `sendfile` zero-copy path
+* OpenAPI-derived route table generation at compile time
+
+## JSON and serialization [#json-and-serialization]
+
+**Shipped (0.1):** `json_parse_create` accepts one object with required keys `name` (string) and `age` (unsigned integer). Strictness: no duplicate keys, no unknown keys, no trailing commas, BMP-only `\uXXXX` escapes (no surrogate pairs), UTF-8 validation, max name 256 bytes into request arena.
+
+Response helpers `ctx_json_user`, `ctx_json_id` escape strings for JSON text in `out[]`.
+
+**Ecosystem serialization roadmap:**
+
+| Format          | Role                 | Handler exposure                      |
+| --------------- | -------------------- | ------------------------------------- |
+| JSON            | REST APIs, config    | `Slice` in/out via runtime            |
+| MessagePack     | Compact RPC          | `msgpack_decode_user(ctx, …)`         |
+| CBOR            | IoT / COSE adjacency | Schema-id prefixed blobs              |
+| Protobuf        | gRPC services        | Generated C structs + arena views     |
+| Form urlencoded | HTML forms           | Query parser sharing router utilities |
+
+Design rule: parsers are **schema-specific** in early releases to bound complexity; a general DOM JSON API is optional and lives off the hot path.
+
+## Authentication and authorization (planned) [#authentication-and-authorization-planned]
+
+Not in 0.1. Intended layers:
+
+1. **Transport:** mTLS between services
+2. **Request:** `Authorization: Bearer` JWT validation (HMAC or Ed25519) in middleware
+3. **Session:** Signed cookie + server-side store in Redis
+4. **OAuth2:** External IdP; runtime stores only validated claims in `Ctx` extensions
+
+Password hashing (Argon2id) belongs in registration flows, never in handlers as raw string compare.
+
+## Async Model A — synchronous reactor (shipped) [#async-model-a--synchronous-reactor-shipped]
+
+```text
+epoll_wait → read → parse → handler() → write → arena reset
+```
+
+Properties:
+
+* Single thread, no locks on connection table
+* Handler must return quickly; SQLite calls block the loop
+* Predictable latency variance under low load
+* Simple reasoning about `Slice` lifetimes
+
+This is the 0.1 users service model documented end-to-end in the repository.
+
+## Async Model B — executor and continuations (planned) [#async-model-b--executor-and-continuations-planned]
+
+```text
+epoll_wait → schedule IoTask → on complete resume Continuation → handler stages
+```
+
+Components:
+
+* **Reactor thread(s)** — only socket/TLS/timer events
+* **Worker pool** — CPU-bound or blocking DB/HTTP client work
+* **Channels** — pass owned buffers between threads with refcount or arena transfer
+* **`async fn`** — compiler lowers to struct state machine + function pointers
+
+Handler ABI evolution: `CForgeFn` returns `CFORGE_YIELD` to suspend; runtime stores stack frame in connection slot. **Constraint:** no `Slice` pointing at stack across yield unless copied to arena.
+
+Comparison:
+
+| Concern                        | Model A     | Model B                       |
+| ------------------------------ | ----------- | ----------------------------- |
+| Throughput on many cores       | Limited     | Scales with workers           |
+| Tail latency under blocking DB | Spikes      | Isolated to workers           |
+| Memory                         | Fixed slots | Queues + continuation storage |
+| Debugging                      | Linear      | Harder ordering bugs          |
+
+Hybrid deployments may run Model A on edge nodes and Model B behind internal load balancers.
+
+## WebSockets and SSE (planned) [#websockets-and-sse-planned]
+
+WebSocket upgrade would share the HTTP parser’s header phase, then switch slot mode to frame codec. Server-Sent Events reuse HTTP/1.1 chunked responses with `text/event-stream`. Both stay out of language syntax; registration resembles `app_get` with a protocol flag.
+
+**Shipped:** `GET /ws` performs an RFC 6455 handshake and echoes client text frames (runtime-built; not registered via `app_get`).
+
+## Caching semantics at HTTP layer [#caching-semantics-at-http-layer]
+
+`ETag` / `If-None-Match` and `Cache-Control` for static assets are **planned**. Dynamic JSON APIs default to `Cache-Control: no-store` unless handlers set headers via future `ctx_header` API.
+
+## Error responses [#error-responses]
+
+Runtime-generated errors use fixed bodies or empty bodies per status. Application errors use `ctx_text` / `ctx_status`. **Shipped:** `ctx_problem` returns Problem Details (`application/problem+json`) with `title`, `detail`, and `status` fields (used on invalid create-user JSON).
+
+## Testing implications [#testing-implications]
+
+Integration tests in `./cforge test` cover pipelining, split header writes, TLS 1.3, WebSocket `/ws` echo, and graceful `SIGTERM`. Async Model B will need stress tests for continuation leaks and ordered response writes on one connection.
+
+See [networking.html](networking.html) for sockets and [memory.html](memory.html) for buffer lifetimes during pipelining.
+
+
+# CForge backend ecosystem specification (/docs/spec)
+
+
+
+This document set describes the **full CForge backend ecosystem design**: how application code, the language compiler, the C runtime, optional native machine code, and Linux facilities fit together to build network services. It is normative for **intent** and descriptive for **release 0.1**, which implements a vertical slice (HTTP/1.1, WebSocket `/ws`, SQLite pool, optional Postgres/Redis, TLS 1.3, single-threaded epoll) documented in the repository’s end-to-end guide.
+
+The specification is organized by concern, not by source file. Cross-cutting themes—explicit memory, integer error codes, library-not-language features, and predictable syscall budgets—appear in every layer.
+
+## Architectural stance [#architectural-stance]
+
+CForge targets **low-latency, allocation-bounded request paths** on Linux. The language expresses control flow and calls into a **stable runtime ABI** (`Slice`, `Ctx`, route registration, database helpers). The runtime owns syscalls, protocol state machines, buffer pools, and cryptographic primitives. There is no mandatory garbage collector and no hidden thread pool on the hot path in the reference server architecture.
+
+Three compile-time backends coexist in the long-term design:
+
+| Backend            | Role                               | Typical artifact                       |
+| ------------------ | ---------------------------------- | -------------------------------------- |
+| **C server**       | Fast iteration, full runtime link  | `build/cforge-users` via generated C11 |
+| **Native machine** | Syscalls, tight loops, teaching    | x86-64 ELF from `cforge_mach.py`       |
+| **Future IR**      | Shared optimizations, cross-target | SSA-like IR lowering to C or machine   |
+
+Release 0.1 ships the C server path and a partial machine path. The IR backend is roadmap only; see [toolchain.html](toolchain.html).
+
+## Layer diagram [#layer-diagram]
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│  Application (.cforge) — routes, validation, orchestration   │
+└───────────────────────────────┬─────────────────────────────┘
+                                │ CForgeFn(Ctx*), integer codes
+┌───────────────────────────────▼─────────────────────────────┐
+│  Runtime API (cforge_rt.h) — HTTP helpers, JSON, DB, listen  │
+└───────────────────────────────┬─────────────────────────────┘
+                                │ internal.h: Arena, limits, Ctx
+┌───────────────────────────────▼─────────────────────────────┐
+│  Runtime implementation (server.c, json.c, db.c, …)          │
+│  HTTP/1.1, router, TLS glue, SQLite, metrics, logging       │
+└───────────────────────────────┬─────────────────────────────┘
+                                │ epoll, sockets, OpenSSL, pthread*
+┌───────────────────────────────▼─────────────────────────────┐
+│  Linux kernel — TCP/UDP, timers, files, optional io_uring     │
+└───────────────────────────────────────────────────────────────┘
+
+Optional sidecars: PostgreSQL (`CFORGE_PG_DSN`), Redis invalidation (`CFORGE_REDIS_URL`), and future message bus consumers — Kafka/NATS remain design-only.
+```
+
+Handlers never see file descriptors. The runtime passes **views** (`Slice`) into fixed per-connection storage. That boundary is the primary safety and performance contract; see [boundary.html](boundary.html).
+
+## Request lifecycle (reference server) [#request-lifecycle-reference-server]
+
+A single client request on the 0.1 server traverses:
+
+```text
+TCP accept (epoll) → optional TLS 1.3 → HTTP/1.1 parse → route match
+  → handler (.cforge) → JSON/SQLite → response buffer → write/SSL_write
+  → arena reset + DB statement release
+```
+
+Future designs add HTTP/2 streams, async I/O variants, and worker threads without changing the handler signature; work is scheduled before `CForgeFn` is invoked. Details live in [http-async.html](http-async.html) and [networking.html](networking.html).
+
+## Specification map [#specification-map]
+
+| Document                           | Topics                                                                |
+| ---------------------------------- | --------------------------------------------------------------------- |
+| [boundary.html](boundary.html)     | Language vs runtime, `Slice`/`Ctx`, error policy, FFI to C and native |
+| [networking.html](networking.html) | TCP/UDP, epoll, backpressure, TLS transport, DNS hooks                |
+| [http-async.html](http-async.html) | HTTP versions, router, JSON/serialization, async model A vs B         |
+| [memory.html](memory.html)         | Arenas, slabs, zero-copy rules, concurrency models                    |
+| [database.html](database.html)     | SQLite today, pool design, cache, message queues                      |
+| [libraries.html](libraries.html)   | Auth, config, logging, observability, packages                        |
+| [toolchain.html](toolchain.html)   | Build/test, security posture, compiler and IR roadmap                 |
+| [production.html](production.html) | Deployment, SLO model, three architectures, operations                |
+
+## Design invariants [#design-invariants]
+
+These rules apply across all planned backends unless a document explicitly carves an exception:
+
+1. **No allocation on the steady-state handler path** in the reference epoll server; bump arenas and pre-sized buffers only.
+2. **Integer return codes** instead of exceptions; `0` success, positive domain codes, `-1` for hard failures.
+3. **Library boundaries** — protocols and storage are runtime functions, not language keywords.
+4. **Bounded resources** — max connections, header/body sizes, route count, idle timeouts; overload degrades by pausing accept, not by unbounded fds.
+5. **Explicit shutdown** — signal → eventfd → drain in-flight → release slabs and DB handles.
+
+## Relationship to other docs [#relationship-to-other-docs]
+
+The [learn](../learn/introduction.html) track teaches CForge from a user perspective. [Reference](../reference/runtime-api.html) lists the stable runtime surface. [Implementation status](../status.html) marks what is shipped in 0.1 versus planned. This **spec** series is the systems design reference for contributors extending the runtime, adding protocols, or choosing between sync epoll and future async models.
+
+## Versioning [#versioning]
+
+Specification sections label **Shipped (0.1)** when behavior matches the users service binary, and **Planned** when describing ecosystem components (HTTP/2, Kafka, JWT, multi-thread pool) not yet in the tree. Postgres, Redis, and WebSocket are shipped when enabled via environment or built-in `/ws`; see [status.html](../status.html).
+
+
+# Libraries: packages, config, auth, errors, logging, observability (/docs/spec/libraries)
+
+
+
+Beyond HTTP and storage, a production CForge deployment composes **libraries** linked into the runtime or loaded as plugins. None of these are language syntax; they expose C ABI entry points and environment hooks. This page catalogs the ecosystem design and what release 0.1 actually links.
+
+## Package model [#package-model]
+
+**Shipped (0.1):** `cforge.toml` is minimal:
+
+```toml
+[package]
+name = "users"
+entry = "app/users.cforge"
+```
+
+The `cforge` driver resolves the entry file, emits `build/<name>.gen.c`, compiles runtime sources, and links a single binary. There is no remote registry, version solver, or transitive dependencies.
+
+**Planned package manifest:**
+
+```toml
+[package]
+name = "users"
+version = "0.2.0"
+entry = "app/users.cforge"
+
+[dependencies]
+cforge-http = "1.0"
+cforge-pg = "0.3"
+
+[features]
+default = ["tls"]
+tls = ["cforge-http/tls"]
+```
+
+Packages publish as source trees or static archives with a `cforge.lock` pinning hashes. `cforge vendor` copies dependencies into `vendor/` for reproducible CI. The compiler whitelists callable symbols per dependency’s `exports.txt`.
+
+## Configuration [#configuration]
+
+**Shipped (0.1):** Environment variables only (`PORT`, `TLS_PORT`, `CFORGE_BIND`, `CFORGE_DB`, `CFORGE_PG_DSN`, `CFORGE_REDIS_URL`, `CFORGE_DB_POOL`, TLS paths, `CFORGE_MAX_CONNS`, `CFORGE_IDLE_MS`). No config file parser in the binary.
+
+**Planned layers:**
+
+| Source                | Precedence | Use                             |
+| --------------------- | ---------- | ------------------------------- |
+| CLI flags             | Highest    | One-off overrides               |
+| Environment           | High       | 12-factor containers            |
+| `cforge.toml` `[env]` | Medium     | Defaults in repo                |
+| File `cforge.yaml`    | Low        | Structured multi-section config |
+
+Hot reload: SIGHUP or admin endpoint reloads non-secret sections; secrets rotate via file watch on symlink swap. Typed accessors `config_u16("server.port")` avoid string typos in handlers.
+
+## Authentication and authorization [#authentication-and-authorization]
+
+**0.1:** No auth on the users API (localhost deployment assumption).
+
+**Planned library `cforge-auth`:**
+
+* Password verify: Argon2id with per-user salt stored in DB
+* JWT issue/validate: Ed25519 keys, `exp`/`iss`/`aud` checks, constant-time compare
+* API keys: HMAC-signed tokens in header `X-Api-Key`
+* RBAC: role claims in JWT mapped to route middleware allowlists
+
+Middleware runs as `CForgeFn` wrappers registered before route handlers. Failed auth returns `401`/`403` without invoking business logic.
+
+OAuth2 authorization code flow belongs in a separate admin binary or edge gateway; the service runtime only validates bearer tokens.
+
+## Errors [#errors]
+
+Two layers:
+
+1. **Runtime protocol errors** — fixed HTTP statuses before handlers (malformed request)
+2. **Application errors** — integer codes from `db_*`, `json_*`, handler logic
+
+**Planned standardization:**
+
+* `cforge_error` enum in headers for tooling
+* Problem Details JSON (`type`, `title`, `status`, `detail`, `instance`)
+* Correlation id header `X-Request-Id` generated at accept, stored in `Ctx`, echoed in logs
+
+No stack traces to clients in production; `detail` is sanitized.
+
+## Logging [#logging]
+
+**Shipped (0.1):** One stderr line per queued response:
+
+```text
+INFO status_queued method=GET path=/health
+```
+
+systemd journal captures stderr. Status numeric code is not in the log line—only in wire bytes.
+
+**Planned structured logging:**
+
+* Key-value fields: `ts`, `level`, `request_id`, `method`, `path`, `status`, `duration_us`, `db_wait_us`
+* Log levels: ERROR, WARN, INFO, DEBUG (compile-time strip DEBUG in release)
+* Optional JSON lines to stdout for Loki/Elasticsearch
+* Secret redaction filter on `Authorization` and cookie headers
+
+Signal-safe logging on critical paths: preformatted ring buffer written from signal handler for crash dumps only.
+
+## Observability [#observability]
+
+**Shipped (0.1):** `GET /metrics` text format includes:
+
+```text
+requests_total
+active_connections
+db_errors
+accept_paused
+db_backend
+redis_backend
+redis_errors
+ws_upgrades
+```
+
+`/health` liveness and `/ready` readiness are shipped. Histograms and OpenTelemetry remain planned.
+
+Cardinality control: aggregate by route pattern, not raw path (avoid `:id` explosion).
+
+**Planned telemetry stack:** OpenTelemetry tracing, profiling admin port, histogram latency on `/metrics`.
+
+## Security libraries (cross-cutting) [#security-libraries-cross-cutting]
+
+* **TLS:** OpenSSL today; consider BoringSSL build flavor
+* **Crypto:** libsodium for new code paths (JWT, cookies)
+* **Input validation:** max lengths enforced in runtime parsers, duplicated in handlers only for domain rules
+* **Rate limiting:** token bucket in Redis or in-process sharded counters
+* **CSRF:** relevant for cookie sessions on HTML forms, not JSON API default
+
+See [toolchain.html](toolchain.html) for supply-chain and build hardening.
+
+## HTTP client (planned) [#http-client-planned]
+
+Outbound calls for BFF patterns:
+
+```text
+http_client_get(url_slice, headers, body_out) → status
+```
+
+Connection pool per host, TLS verify with system CA bundle, timeout per request. Never called from Model A reactor thread without blocking risk—use Model B workers.
+
+## Email, SMS, webhooks [#email-sms-webhooks]
+
+Thin adapters behind queue consumers. Handlers enqueue intent; workers call external APIs with retries and exponential backoff. Idempotency keys stored in outbox or dedup table.
+
+## Internationalization [#internationalization]
+
+Not on server hot path for JSON APIs. **Planned** `Accept-Language` negotiation for HTML error pages generated by runtime templates.
+
+## Testing libraries [#testing-libraries]
+
+**Shipped:** `./cforge test` integration harness. **Planned:** `cforge-test` crate with assert macros on HTTP responses, snapshot JSON bodies, and fake clock for idle timeout tests.
+
+## Documentation generation [#documentation-generation]
+
+OpenAPI from route metadata annotations in comments or sidecar YAML; `cforge docgen` emits spec for consumers. Keeps handlers as source of truth for paths and methods.
+
+## Summary matrix [#summary-matrix]
+
+| Library area | 0.1            | Planned entry       |
+| ------------ | -------------- | ------------------- |
+| Packages     | Single binary  | Registry + lockfile |
+| Config       | Env vars       | Layered config      |
+| Auth         | None           | JWT + middleware    |
+| Errors       | Integer + HTTP | Problem Details     |
+| Logging      | stderr INFO    | Structured JSON     |
+| Metrics      | Four counters  | Prometheus + traces |
+
+Integration with storage and queues is in [database.html](database.html); deployment wiring in [production.html](production.html).
+
+
+# Memory, arenas, zero-copy, and concurrency (/docs/spec/memory)
+
+
+
+CForge backend services are designed around **predictable memory**: preallocated slabs, per-request bump allocators, and explicit `Slice` ownership. This document specifies the 0.1 layout, zero-copy rules, and how concurrency models interact with lifetimes.
+
+## Global allocation policy [#global-allocation-policy]
+
+**Shipped (0.1):** The request hot path does not call `malloc` or `free`. Startup allocates:
+
+* Connection slot array (size × per-slot buffers)
+* Route table strings (registration time only)
+* SQLite connection and prepared statements
+* OpenSSL context and certificate material
+
+Failure to allocate at startup is fatal before listening. Runtime expansion of limits requires restart with new environment values.
+
+Constants from `runtime/internal.h` (defaults):
+
+| Constant                   | Value | Purpose                   |
+| -------------------------- | ----- | ------------------------- |
+| `CFORGE_MAX_CONNS_DEFAULT` | 128   | Connection slots          |
+| `CFORGE_MAX_HEADER`        | 8192  | Header block limit        |
+| `CFORGE_MAX_BODY`          | 65536 | Body limit                |
+| `CFORGE_MAX_NAME`          | 256   | User name cap             |
+| `CFORGE_ARENA`             | 4096  | Per-connection bump arena |
+| `CFORGE_OUT_CAP`           | 16384 | Response buffer           |
+| `CFORGE_MAX_ROUTES`        | 64    | Registered routes         |
+| `CFORGE_IDLE_MS_DEFAULT`   | 30000 | Idle timeout              |
+
+## Per-connection layout [#per-connection-layout]
+
+Each slot owns:
+
+```text
+in[]     CFORGE_MAX_HEADER + CFORGE_MAX_BODY   raw HTTP including partial
+out[]    CFORGE_OUT_CAP                        full response before/during write
+arena    CFORGE_ARENA                          decoded strings, DB copies
+```
+
+The read buffer must hold one maximum header plus one maximum body simultaneously. The arena is a bump pointer: `cforge_arena_reset` sets offset to zero with no destructors.
+
+## Request arena lifecycle [#request-arena-lifecycle]
+
+```text
+accept → … → parse complete → handler runs (arena allocates)
+  → response queued → write completes or continues
+  → cforge_arena_reset + cforge_db_release
+  → next request on same keep-alive connection reuses arena from offset 0
+```
+
+Handlers may allocate multiple times in one request until the arena exhausts; overflow returns `-1` from helpers and should map to `500`.
+
+## Ownership table (POST /users example) [#ownership-table-post-users-example]
+
+| Bytes            | Location      | Freed when                    |
+| ---------------- | ------------- | ----------------------------- |
+| TLS state        | slot          | connection close              |
+| Raw HTTP body    | `in[]`        | cursor advances after handler |
+| Decoded `name`   | arena         | arena reset                   |
+| Row in SQLite    | database file | `DELETE` or process exit      |
+| JSON in response | `out[]`       | overwritten on next response  |
+
+`db_get_user` returns `Slice` pointers into the arena after copying SQLite text columns—required because `sqlite3_reset` invalidates column pointers. JSON writers must finish before arena reset.
+
+## Zero-copy principles [#zero-copy-principles]
+
+**True zero-copy** (kernel to user without extra memcpy) applies sparingly:
+
+| Path                            | Zero-copy?                       | Notes                                             |
+| ------------------------------- | -------------------------------- | ------------------------------------------------- |
+| Static string literal → `Slice` | Yes                              | Points at `.rodata`                               |
+| HTTP body → handler `ctx->body` | Yes                              | View into `in[]`                                  |
+| Body → JSON string field        | No                               | Escaping and validation copy                      |
+| SQLite TEXT → handler           | No                               | Copied to arena for safety                        |
+| Response → socket               | One memcpy to `out[]` then write | **Planned:** `writev` scatter if encoding streams |
+
+**Planned:** `sendfile` for static assets; `splice` between sockets for proxy mode; read-only `Slice` into mmap’d config files for the process lifetime.
+
+## Slice safety rules for authors [#slice-safety-rules-for-authors]
+
+1. Do not store `Slice.ptr` in global or static variables.
+2. Do not return `Slice` from handlers to the runtime except through documented out-parameters filled before return.
+3. Treat `ctx->body` as valid only for the synchronous handler call.
+4. Assume another pipelined request on the same connection will repurpose `in[]` after the current response is processed.
+
+The language does not enforce borrow checking. **Planned** `@safe` mode would compile-time track `Slice` scopes; 0.1 relies on discipline and short arenas.
+
+## Concurrency and memory [#concurrency-and-memory]
+
+**Model A (0.1):** Single thread—no locks on slots, arenas, or SQLite use flag. `busy_timeout` on SQLite only matters if another process opens the same DB file.
+
+**Model B (planned):** Workers must not share connection `in[]`/`out[]`. Patterns:
+
+* Move request snapshot into owned buffer on handoff
+* Per-worker arena pools to avoid cross-thread bump allocators
+* Reference-counted immutable response bodies for cache hits
+
+**Read-copy-update** for read-mostly config (route table, JWT public keys) allows reload without stopping the listener—swap pointer after parsing new table in staging buffer.
+
+## Cache memory (design) [#cache-memory-design]
+
+In-process LRU for hot keys uses a fixed byte cap from a dedicated slab, not the per-request arena. Eviction is explicit; no GC. Shared **Redis** cache stores serialized blobs; handlers receive copies into arena on hit. See [database.html](database.html).
+
+## Fragmentation and long uptime [#fragmentation-and-long-uptime]
+
+Bump arenas eliminate per-request heap fragmentation. Long-lived malloc at startup (routes, SSL) is bounded. **Planned** metrics: arena high-water mark per slot, `out[]` overflow count, slab OOM at accept.
+
+## Debugging memory bugs [#debugging-memory-bugs]
+
+Symptoms and likely causes:
+
+| Symptom                         | Likely cause                      |
+| ------------------------------- | --------------------------------- |
+| Garbage JSON                    | `Slice` into freed arena          |
+| Intermittent 500 on large names | Arena exhaustion                  |
+| Crash after DELETE              | Use-after-free on stored `Slice`  |
+| TLS memory growth               | Missing `SSL_free` on error paths |
+
+AddressSanitizer builds of the runtime are recommended for contributors; production binaries trade ASan for speed.
+
+## Relation to machine backend [#relation-to-machine-backend]
+
+Native ELF programs use the stack and registers only—no arena. Teaching syscalls without libc malloc reinforces the same **explicit lifetime** mindset as the HTTP server.
+
+See [boundary.html](boundary.html) for ABI types and [production.html](production.html) for capacity planning from slot and buffer sizes.
+
+
+# Networking and transport (/docs/spec/networking)
+
+
+
+CForge’s reference server is built on **Linux BSD sockets** and **edge-triggered readiness** via `epoll`. This document specifies transport behavior for the shipped users service and the broader ecosystem design for UDP, connection tuning, TLS as a transport adapter, and future kernel interfaces.
+
+## TCP server model [#tcp-server-model]
+
+**Shipped (0.1):** One OS thread owns one `epoll` instance. Listen sockets for plain HTTP and optional TLS are registered with distinct user-data tags. Accepted connections become non-blocking (`accept4` with `SOCK_NONBLOCK | SOCK_CLOEXEC`), with `TCP_NODELAY` and `SO_KEEPALIVE` enabled.
+
+Connection state lives in a **fixed slot table** sized by `CFORGE_MAX_CONNS` (default 128, clamped 1–4096 via environment). Each slot tracks:
+
+* File descriptor and optional `SSL *`
+* Read buffer cursor (`in_off`, `in_len`) over a preallocated `in[]` slab
+* Write state over `out[]`
+* Last activity timestamp for idle close
+* Epoll interest mask (`EPOLLIN`, `EPOLLOUT`)
+
+When all slots are busy, listen sockets are **removed from epoll** so the kernel backlog absorbs pressure (`accept_paused` metric). This is deliberate backpressure: the process does not accept fds it cannot service.
+
+## Read and write semantics [#read-and-write-semantics]
+
+Reads append to `in[]` until `EAGAIN`. Partial HTTP requests stay in place; the parser returns “need more bytes” without consuming incomplete data. When the user read buffer is full, `EPOLLIN` is dropped until the handler consumes or rejects the request—preventing busy loops on slow clients.
+
+Writes buffer the full HTTP response in `out[]` before the first `write` or `SSL_write`. If the syscall returns `EAGAIN`, `EPOLLOUT` is armed and the event loop resumes when the socket is writable. `SIGPIPE` is ignored; closed peers surface as `EPIPE` and trigger slot teardown.
+
+Idle connections are scanned on `epoll_wait` timeout (approximately 500 ms, or half of `CFORGE_IDLE_MS` when under one second). Slots exceeding the idle budget close regardless of keep-alive negotiation—this doubles as slow-client protection for half-sent headers.
+
+## epoll user-data encoding [#epoll-user-data-encoding]
+
+**Shipped (0.1)** uses small integer cookies in `epoll_event.data.u64`:
+
+| Cookie       | Source                                        |
+| ------------ | --------------------------------------------- |
+| `1`          | `eventfd` for shutdown (`SIGTERM` / `SIGINT`) |
+| `2`          | HTTP listen socket                            |
+| `3`          | TLS listen socket                             |
+| `10 + index` | Connection slot `index`                       |
+
+Signal handlers only set a flag and write eight bytes to the eventfd; they do not allocate. Shutdown closes listeners first, marks in-flight connections for close-after-response, then frees global slabs when `active_connections` reaches zero.
+
+**Planned:** Per-listener load metrics, `EPOLLONESHOT` for accept thundering herds on multi-listener deployments, and optional `SO_REUSEPORT` fan-out across worker processes.
+
+## UDP (design) [#udp-design]
+
+Release 0.1 does not expose UDP in the runtime API. The ecosystem design includes:
+
+| Use case       | API shape                           | Notes                                     |
+| -------------- | ----------------------------------- | ----------------------------------------- |
+| DNS resolution | Blocking `getaddrinfo` off hot path | Cached in startup or worker thread        |
+| QUIC / HTTP/3  | UDP socket + userspace stack        | Separate from epoll HTTP/1 loop initially |
+| Metrics push   | Connected UDP to collector          | Fire-and-forget with drop counter         |
+| Game / RTC     | Dedicated reactor thread            | Not mixed with HTTP slot table            |
+
+UDP endpoints would register parallel epoll entries with the same slot discipline or a smaller datagram ring buffer to avoid per-packet malloc.
+
+## TLS as transport [#tls-as-transport]
+
+TLS terminates in the runtime before bytes are interpreted as HTTP. **Shipped (0.1):** OpenSSL drives `SSL_accept`, `SSL_read`, `SSL_write` on the connection slot. Plaintext HTTP still lands in `in[]`; ciphertext never escapes to handlers.
+
+Context configuration:
+
+* TLS 1.3 only (min and max protocol version pinned)
+* Renegotiation and compression disabled
+* PEM certificate and private key from environment paths
+* Handshake failure closes the socket with no HTTP response
+
+Dual listeners: HTTP on `PORT` (default 8080), HTTPS on `TLS_PORT` (default 8443) when cert and key are set. **Planned:** ALPN for `h2`, session tickets, OCSP stapling, mutual TLS for service-to-service calls.
+
+## Addressing and bind policy [#addressing-and-bind-policy]
+
+`CFORGE_BIND` defaults to `127.0.0.1`. Production guidance: bind loopback behind a reverse proxy unless the deployment model requires direct exposure. IPv6 listener support is **planned** (`getaddrinfo` with `AI_PASSIVE`, separate slot limits per address family).
+
+## Connection lifecycle diagram [#connection-lifecycle-diagram]
+
+```text
+        listen (HTTP/TLS)
+              │
+              ▼
+           accept4 ──► slot allocate
+              │
+              ├─► [TLS] SSL_accept loop until OK or fatal
+              │
+              ▼
+         EPOLLIN ──► read ──► HTTP parser
+              │
+              ▼
+           handler
+              │
+              ▼
+         EPOLLOUT ◄── write until drained or EAGAIN
+              │
+              ├─► keep-alive ──► wait EPOLLIN
+              └─► close / idle / shutdown flag ──► SSL_free, close(fd), free slot
+```
+
+## Kernel alternatives (roadmap) [#kernel-alternatives-roadmap]
+
+| API                  | When to adopt                | Tradeoff                         |
+| -------------------- | ---------------------------- | -------------------------------- |
+| `epoll`              | Default single-thread server | Simple, mature                   |
+| `io_uring`           | High QPS, batch reads        | Complexity, kernel version floor |
+| Thread pool + `poll` | Portable non-Linux           | Not a CForge 0.1 target          |
+
+Any migration keeps the **handler ABI** unchanged: only the reactor implementation swaps.
+
+## Observability hooks [#observability-hooks]
+
+Per-connection counters feed `/metrics` in 0.1: `requests_total`, `active_connections`, `db_errors`, `accept_paused`. **Planned:** histogram of accept-to-response latency, TLS handshake failures, read/write `EAGAIN` counts, and epoll wake reasons tagged by cookie type.
+
+## Failure matrix [#failure-matrix]
+
+| Event                  | Action                                  |
+| ---------------------- | --------------------------------------- |
+| Peer reset during read | Drop slot, decrement active             |
+| Malformed TLS alert    | Close slot, no HTTP body                |
+| Listen backlog full    | Kernel drops SYN; client retries        |
+| `EMFILE` on accept     | Log once, pause accept until slot frees |
+
+Networking detail for HTTP parsing and routing continues in [http-async.html](http-async.html). Memory ownership for buffers is in [memory.html](memory.html).
+
+
+# Production deployment, performance, and architecture comparison (/docs/spec/production)
+
+
+
+Operating CForge services in production requires aligning the **0.1 reference binary** with broader ecosystem goals: graceful lifecycle, observable SLOs, capacity planning, and choosing among three server architectures. This document is the operations-facing capstone of the spec series.
+
+## Reference deployment (0.1) [#reference-deployment-01]
+
+Typical layout:
+
+```text
+systemd user unit → build/cforge-users
+  → bind 127.0.0.1:8080 (HTTP), :8443 (TLS)
+  → SQLite file on persistent volume
+  → PEM cert/key from deploy/ (self-signed for dev)
+```
+
+Example unit fields:
+
+* `ExecStart` absolute path to binary
+* `WorkingDirectory` repo root for relative DB default
+* `Environment=PORT`, `TLS_PORT`, `CFORGE_BIND`, `CFORGE_DB`, TLS paths
+* `Restart=on-failure` — clean SIGTERM exit 0 does not restart
+
+`./cforge deploy` writes and enables the user unit, generates certs if missing, waits until `GET /health` returns `ok`.
+
+**Production hardening beyond 0.1:**
+
+* Terminate TLS at reverse proxy (nginx, Caddy) with real CA certs
+* Run behind private network; expose only proxy
+* Separate DB to managed PostgreSQL per [database.html](database.html)
+* Centralize logs and metrics per [libraries.html](libraries.html)
+
+## Graceful shutdown [#graceful-shutdown]
+
+**Shipped behavior** on `SIGTERM` / `SIGINT`:
+
+```text
+eventfd wakes epoll_wait
+  → close listen sockets (port reusable)
+  → close idle connections
+  → mark active connections close-after-response
+  → when active_connections == 0, free slabs, finalize SQLite, exit 0
+```
+
+Kubernetes: `terminationGracePeriodSeconds` must exceed worst-case in-flight request time plus client slow-read. PreStop hook can sleep briefly after deregistering from load balancer.
+
+## Performance model [#performance-model]
+
+### Steady-state cost per request (Model A) [#steady-state-cost-per-request-model-a]
+
+Dominant terms:
+
+1. TLS decrypt (if used) — OpenSSL constant overhead
+2. HTTP parse — linear in header + body size, bounded
+3. Handler — JSON parse + SQLite bind/step (blocking)
+4. Response encode + encrypt + write
+
+No per-request heap allocation; arena bump is O(bytes allocated in handler).
+
+### Capacity variables [#capacity-variables]
+
+| Variable           | Effect                                            |
+| ------------------ | ------------------------------------------------- |
+| `CFORGE_MAX_CONNS` | Max parallel clients                              |
+| Handler DB latency | Directly adds to event-loop stall (Model A)       |
+| Keep-alive         | Amortizes TLS handshake; increases slot occupancy |
+| `accept_paused`    | Signals saturation; clients see SYN backlog delay |
+
+Rough planning: if mean handler time is `T` ms and one thread, sustainable RPS ≈ `1000 / T` for CPU-bound handlers ignoring I/O overlap. I/O overlap improves effective RPS until SQLite or handler blocks.
+
+### Tail latency [#tail-latency]
+
+Model A suffers **head-of-line blocking** behind slow SQLite or large bodies. Model B isolates blocking to workers at cost of queue depth and memory. See [http-async.html](http-async.html).
+
+### Zero-copy and proxy mode (planned) [#zero-copy-and-proxy-mode-planned]
+
+Edge proxy terminates TLS and speaks HTTP/1.1 or h2 to backend over loopback—reduces crypto load on CForge process. Static assets served via `sendfile` from proxy, not app binary.
+
+## Three architectures comparison [#three-architectures-comparison]
+
+The ecosystem contemplates three deployment shapes:
+
+### Architecture 1 — Monolithic sync reactor (0.1) [#architecture-1--monolithic-sync-reactor-01]
+
+```text
+[ Clients ] → [ cforge-users: epoll + TLS + HTTP + SQLite ]
+```
+
+| Strength                  | Weakness                      |
+| ------------------------- | ----------------------------- |
+| Simple deploy, low memory | Single-core CPU ceiling       |
+| Predictable lifetimes     | Blocking DB hurts all clients |
+| Easy local dev            | Not ideal for high QPS        |
+
+Best for: edge APIs on small VMs, development, embedded admin ports.
+
+### Architecture 2 — Monolith + worker pool (planned Model B) [#architecture-2--monolith--worker-pool-planned-model-b]
+
+```text
+[ Clients ] → [ reactor ] → queue → [ workers + PG pool ]
+```
+
+| Strength             | Weakness                        |
+| -------------------- | ------------------------------- |
+| Uses multiple cores  | Continuation + queue complexity |
+| Hides DB latency     | Harder debug, more memory       |
+| Same binary artifact | Requires careful Slice rules    |
+
+Best for: OLTP APIs with 10–50 ms DB calls, moderate concurrency.
+
+### Architecture 3 — Microservices + bus (planned) [#architecture-3--microservices--bus-planned]
+
+```text
+[ Clients ] → [ API gateway ]
+                 ↓           ↓
+           [ cforge-users ]  [ cforge-search ]
+                 ↓           ↑
+              [ Kafka / outbox relay ]
+                 ↓
+           [ PostgreSQL ]
+```
+
+| Strength                     | Weakness                                         |
+| ---------------------------- | ------------------------------------------------ |
+| Independent scale and deploy | Network partitions, distributed tracing required |
+| Technology mix per service   | Operational overhead                             |
+| Clear blast radius           | Eventual consistency                             |
+
+Best for: teams, multi-tenant SaaS, search/analytics sidecars.
+
+### Decision matrix [#decision-matrix]
+
+| Criterion            | Arch 1       | Arch 2             | Arch 3                   |
+| -------------------- | ------------ | ------------------ | ------------------------ |
+| Time to first deploy | ★★★          | ★★                 | ★                        |
+| Peak RPS on one host | ★            | ★★★                | ★★ (aggregate)           |
+| Operational cost     | ★★★          | ★★                 | ★                        |
+| Data consistency     | Strong local | Strong with one DB | Eventual across services |
+
+Migrate 1 → 2 by enabling worker pool in same binary. Migrate 2 → 3 by extracting read models and async consumers without changing handler source if outbox pattern is used from day one.
+
+## SLO suggestions [#slo-suggestions]
+
+Example targets for a users API behind Arch 1 on loopback:
+
+| SLO          | Target      | Measurement               |
+| ------------ | ----------- | ------------------------- |
+| Availability | 99.9%       | `/health` probe           |
+| p99 latency  | \< 50 ms    | Prometheus histogram      |
+| Error rate   | \< 0.1% 5xx | `db_errors` + 5xx counter |
+
+Saturation alert: `accept_paused == 1` for > 30 s.
+
+## Horizontal scaling [#horizontal-scaling]
+
+**0.1 SQLite** does not multi-write across instances. Production path:
+
+* Move to PostgreSQL
+* Stateless app replicas behind L4/L7 load balancer
+* Sticky sessions only if required; prefer stateless JWT
+
+Session affinity not required for REST JSON API.
+
+## Backup and disaster recovery [#backup-and-disaster-recovery]
+
+* SQLite file: snapshot when stopped or use replication to server DB
+* PostgreSQL: managed backups, test restore quarterly
+* Config and secrets: infra-as-code, not only in unit files
+
+## FFI at production boundary [#ffi-at-production-boundary]
+
+Services may call Rust/Zig crypto or Go policy engines via C ABI plugins. Require:
+
+* Versioned plugin API
+* Timeout on plugin calls in worker threads
+* Fail closed on plugin crash (disable route, alert)
+
+Details in [boundary.html](boundary.html).
+
+## Compliance and audit [#compliance-and-audit]
+
+Log admin mutations with actor id when auth ships. Retain audit outbox immutably. GDPR delete propagates via `DELETE` handler plus cache invalidation and search indexer consumer.
+
+## Upgrade strategy [#upgrade-strategy]
+
+Rolling restart with multiple Arch 2/3 instances behind health-checked load balancer. Run `cforge migrate` once before rolling app deploy. Blue/green: deploy new binary to alternate unit, swap proxy upstream after health pass.
+
+## What 0.1 proves in production [#what-01-proves-in-production]
+
+The users service validates:
+
+* Epoll accept pause under load
+* TLS 1.3 alongside HTTP
+* Arena-safe JSON + SQLite path
+* systemd lifecycle and integration tests
+
+It is not yet a template for multi-region HA without the planned database and queue layers. See [index.html](index.html) for the full spec map; operational detail also appears in the project END-TO-END guide and [implementation status](../status.html).
+
+
+# Toolchain, build, test, security, compiler and IR roadmap (/docs/spec/toolchain)
+
+
+
+The CForge **toolchain** is the `cforge` executable plus `cforge_mach.py` for native ELF. It orchestrates compile, link, integration test, deploy, and (eventually) package fetch and migration. This document covers commands, CI expectations, security posture, and the multi-year compiler roadmap.
+
+## Commands (shipped) [#commands-shipped]
+
+| Command                 | Behavior                                                                        |
+| ----------------------- | ------------------------------------------------------------------------------- |
+| `./cforge build`        | Lex/parse entry → `build/*.gen.c` → `cc` runtime objects → binary               |
+| `./cforge run`          | Build then exec binary in place                                                 |
+| `./cforge test`         | Build, ephemeral ports 18081/18443, 14+ HTTP/TLS checks, SIGTERM, machine tests |
+| `./cforge deploy`       | Build, write systemd user unit, enable/start, wait for `/health`                |
+| `./cforge status`       | GET `/health` and `/metrics` on default port                                    |
+| `./cforge machine`      | Emit x86-64 ELF via `cforge_mach.py`                                            |
+| `./cforge machine-test` | Run native add/expr samples                                                     |
+
+Link line (conceptually): C11, `-O2 -g -Wall -Wextra -Werror`, `libsqlite3`, `libssl`, `libcrypto`, `pthread`.
+
+`cforge.toml` selects package name and entry path only in 0.1.
+
+## Build graph [#build-graph]
+
+```text
+app/users.cforge
+    → lexer / parser (cforge)
+    → build/users.gen.c
+    → cc users.gen.c + runtime/*.c
+    → build/cforge-users
+
+mach/add.cforge
+    → cforge_mach.py
+    → build/mach-add (ELF)
+```
+
+**Planned:** `cforge build --release` strips symbols; `cforge build --target aarch64-unknown-linux-gnu` cross-compile via LLVM backend.
+
+## Testing strategy [#testing-strategy]
+
+Layers:
+
+1. **Machine tests** — deterministic exit codes for arithmetic programs
+2. **Integration tests** — real TCP, TLS 1.3, pipelining, split writes, JSON edge cases
+3. **Unit tests (planned)** — C tests for HTTP parser vectors, JSON fuzz inputs
+4. **Property tests (planned)** — generate random valid HTTP requests within limits
+
+CI (GitHub Actions): Ubuntu, install gcc/SQLite/OpenSSL, run `./cforge test`. No committed TLS certs or production database.
+
+Local parity: tests use separate DB under `build/` to avoid touching `data/users.db`.
+
+## Documentation build [#documentation-build]
+
+`python3 docs/build_docs.py` walks `docs/content/**/*.md` and emits static HTML. Spec pages live under `docs/content/spec/` and publish alongside learn/reference when regenerated.
+
+## Security posture [#security-posture]
+
+### Supply chain [#supply-chain]
+
+* Pin compiler flags `-Werror` in CI
+* Verify dependency hashes when package registry exists
+* Reproducible builds: document compiler version in release notes
+
+### Runtime attack surface [#runtime-attack-surface]
+
+* Bind localhost by default; document risk of `0.0.0.0`
+* TLS 1.3 only; disable weak ciphers and renegotiation
+* Request size limits enforced before handler
+* No `eval`, no runtime `dlopen` in 0.1
+* SQLite parameterized queries only
+
+### Secrets [#secrets]
+
+* PEM keys read from paths in environment, not argv
+* **Planned:** secret files mode `0400`, refuse world-readable key paths
+* Never log bearer tokens or passwords
+
+### Dependency CVE process [#dependency-cve-process]
+
+Track OpenSSL and SQLite advisories; rebuild and redeploy on critical fixes. SBOM export **planned** as `cforge sbom`.
+
+## Compiler pipeline today [#compiler-pipeline-today]
+
+```text
+Source (.cforge)
+  → tokens
+  → AST (functions, statements, calls)
+  → C codegen (types, static functions, cforge_main)
+  → host C compiler
+```
+
+Builtin calls are validated against a fixed list (`app_listen`, `db_*`, `ctx_*`, etc.). Unknown identifiers are compile errors.
+
+## IR roadmap (planned phases) [#ir-roadmap-planned-phases]
+
+### Phase 1 — Typed AST + lint [#phase-1--typed-ast--lint]
+
+* Name resolution and type checking beyond syntax
+* Dead code elimination on unreachable functions
+* Route table validation at compile time (duplicate paths)
+
+### Phase 2 — SSA-like IR [#phase-2--ssa-like-ir]
+
+```text
+.cforge → AST → IR (instructions, basic blocks, phi for merges)
+         → optimizations (const fold, inline small helpers)
+         → C backend OR machine backend
+```
+
+Benefits: single place for `async fn` lowering, shared inlining, debug symbols mapping IR to source lines.
+
+### Phase 3 — Machine backend parity [#phase-3--machine-backend-parity]
+
+* Lower IR to x86-64 and aarch64
+* ELF linking with minimal libc or none for freestanding
+* Same calling convention as current `r0`–`r7` mapping where applicable
+
+### Phase 4 — Alternative backends [#phase-4--alternative-backends]
+
+* WASM for edge workers
+* LLVM IR for vendor optimizers
+
+IR is **not** shipped in 0.1; `cforge_mach.py` remains a separate ad hoc lowering for teaching.
+
+## FFI and codegen safety [#ffi-and-codegen-safety]
+
+Generated C must:
+
+* Include `stdint.h` and `cforge_rt.h`
+* Not emit VLAs on handler path
+* Map `bool` to `int32_t` consistently with runtime
+
+**Planned:** sanitizers build flag `cforge build --asan` for contributors.
+
+## Formatter and linter (planned) [#formatter-and-linter-planned]
+
+`cforge fmt` — canonical indentation and brace style
+`cforge lint` — warn on unreachable code, unused `let`, suspicious `Slice` escapes
+
+## Versioning [#versioning]
+
+Semantic versioning for language breaking changes vs runtime ABI. Runtime functions gain new symbols without breaking existing binaries when using stable `Ctx` size or version negotiation at `app_listen`.
+
+## Release artifacts [#release-artifacts]
+
+* Static binary tarball per arch
+* systemd unit example under `deploy/`
+* **Planned:** OCI images with distroless base, read-only rootfs, non-root user
+
+## Relation to spec siblings [#relation-to-spec-siblings]
+
+* [boundary.html](boundary.html) — what the compiler may call
+* [production.html](production.html) — how built artifacts run at scale
+* [libraries.html](libraries.html) — future package manifests
+
+## Machine backend reference [#machine-backend-reference]
+
+`cforge_mach.py` parses register operations and small expressions, emits ELF with Linux syscall exit. It does not share the HTTP runtime. Roadmap merges front-end with server compiler via IR; until then, two entry commands remain intentional.
+
+## Contributor workflow [#contributor-workflow]
+
+```text
+edit .cforge or runtime/*.c
+./cforge test
+python3 docs/build_docs.py   # if docs changed
+```
+
+Pre-commit hooks **planned** for fmt/lint/test on changed paths only.
+
+
+# Implementation status (/docs/status)
+
+
+
+**Specification:** nine-chapter **design document** on the site — target architecture, not a promise that every item is implemented.
+
+**This repository (release 0.1 demo)** ships a **users-service vertical slice**: CForge-syntax handlers → typechecked → generated C → epoll HTTP/TLS runtime.
+
+Public site: **[https://sumesh-s-dev.github.io/cforge/](https://sumesh-s-dev.github.io/cforge/)**
+
+## Shipped in this repo [#shipped-in-this-repo]
+
+| Area                                                               | Status  |
+| ------------------------------------------------------------------ | ------- |
+| Backend **design docs** (9 chapters)                               | Written |
+| Lexer / parser + **struct** types                                  | Done    |
+| **`app/runtime.cforge`** + **`extern fn`** (no compiler allowlist) | Done    |
+| **Type checker** (arity, handlers, `let` env)                      | Done    |
+| **`./cforge compiler-test`** + **HTTP fuzz** (in `./cforge test`)  | Done    |
+| C server backend + runtime                                         | Done    |
+| Machine ELF backend (x86-64 demo)                                  | Done    |
+| HTTP/1.1 + TLS 1.3 + WebSocket `/ws`                               | Done    |
+| SQLite pool + optional Postgres + optional Redis                   | Done    |
+| Toolchain + `./cforge everything`                                  | Done    |
+| GitHub CI + Pages                                                  | Done    |
+| Docker Compose stack                                               | Done    |
+
+## Roadmap [#roadmap]
+
+HTTP/2–3, Kafka/NATS, JWT/OAuth, full `@safe`, package registry, native IR **server** — see [status table](status.html) in prior commits / spec index.
+
+## Verification [#verification]
+
+```bash
+./cforge compiler-test
+./cforge test          # + fuzz-http
+./cforge everything
+./cforge deploy
+```
+
+## Honest pitch [#honest-pitch]
+
+CForge 0.1 is a **backend DSL + runtime demo** with a **strong architecture skeleton** and a **prototype compiler**. The spec is a **north star**; the next technical depth is **semantics** (ownership/lifetimes, IR), not more optional integrations before that.
+
+## What we are not claiming [#what-we-are-not-claiming]
+
+* A production-ready **general-purpose** systems language (vs C/Rust/Zig)
+* **Memory safety** enforced by the compiler today
+* That the **machine backend** is more than a teaching/demo second target
