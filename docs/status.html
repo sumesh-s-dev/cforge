@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Implementation status — CForge</title>
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="logo" href="index.html">CForge</a>
+<section><h2>Learn</h2><ul>
+<li><a href="learn/introduction.html">Introduction</a></li>
+<li><a href="learn/install.html">Installation</a></li>
+<li><a href="learn/first-program.html">First program</a></li>
+<li><a href="learn/language.html">Language reference</a></li>
+<li><a href="learn/memory.html">Memory &amp; slices</a></li>
+<li><a href="learn/compiler.html">Compiler</a></li>
+<li><a href="learn/runtime.html">Runtime &amp; HTTP</a></li>
+<li><a href="learn/machine.html">Machine backend</a></li>
+</ul></section>
+<section><h2>Reference</h2><ul>
+<li><a href="reference/toolchain.html">Toolchain commands</a></li>
+<li><a href="reference/runtime-api.html">Runtime API</a></li>
+<li><a href="reference/environment.html">Environment</a></li>
+<li><a href="reference/safety.html">Safety modes</a></li>
+</ul></section>
+<section><h2>Project</h2><ul>
+<li><a href="status.html">Implementation status</a></li>
+<li><a href="https://github.com/sumesh-s-dev/cforge">GitHub</a></li>
+</ul></section>
+</nav>
+<main><h1>Implementation status</h1>
+
+<p>**Release 0.1** defines “complete” for this repository: everything listed below as **Done** is implemented, tested, documented, published to GitHub, and deployed locally via <code>./cforge deploy</code>.</p>
+
+<p>Public docs: **https://sumesh-s-dev.github.io/cforge/**</p>
+
+<h2>Release 0.1 — Done</h2>
+
+<table>
+<tr><th>Area</th><th>Status</th></tr>
+<table>
+<tr><th>Lexer / parser (server subset)</th><th>Done</th></tr>
+<table>
+<tr><th>C code generator + link runtime</th><th>Done</th></tr>
+<table>
+<tr><th>Machine ELF backend (integer, r0–r7, syscall)</th><th>Done</th></tr>
+<table>
+<tr><th>epoll HTTP/1.1 server</th><th>Done</th></tr>
+<table>
+<tr><th>TLS 1.3 (OpenSSL)</th><th>Done</th></tr>
+<table>
+<tr><th>SQLite users API</th><th>Done</th></tr>
+<table>
+<tr><th>Request arena + backpressure</th><th>Done</th></tr>
+<table>
+<tr><th>`./cforge` toolchain (build, check, test, deploy, all, machine)</th><th>Done</th></tr>
+<table>
+<tr><th>GitHub CI</th><th>Done</th></tr>
+<table>
+<tr><th>GitHub Pages documentation site</th><th>Done</th></tr>
+<table>
+<tr><th>END-TO-END + book-style docs</th><th>Done</th></tr>
+<table>
+<tr><th>Example service on localhost</th><th>Done</th></tr>
+
+<h2>Language — partial (post-0.1)</h2>
+
+<table>
+<tr><th>Feature</th><th>Status</th></tr>
+<table>
+<tr><th>struct in .cforge</th><th>Planned</th></tr>
+<table>
+<tr><th>Modules / packages</th><th>Planned</th></tr>
+<table>
+<tr><th>Generics / comptime</th><th>Planned</th></tr>
+<table>
+<tr><th>async fn lowering</th><th>Planned</th></tr>
+<table>
+<tr><th>Full native compiler for server</th><th>Planned</th></tr>
+
+<h2>Backend ecosystem — partial</h2>
+
+<table>
+<tr><th>Feature</th><th>Status</th></tr>
+<table>
+<tr><th>PostgreSQL wire client</th><th>Not started</th></tr>
+<table>
+<tr><th>HTTP/2, HTTP/3, WebSockets</th><th>Not started</th></tr>
+<table>
+<tr><th>Connection pool (multi conn)</th><th>Not started</th></tr>
+<table>
+<tr><th>Redis / Kafka clients</th><th>Not started</th></tr>
+<table>
+<tr><th>Package registry</th><th>Not started</th></tr>
+
+<h2>Compiler architecture roadmap</h2>
+
+<pre><code>
+Today:   .cforge → C → gcc     (server)
+         .cforge → MIR → ELF   (machine toys)
+
+Target:  .cforge → CForge IR → ELF + thin runtime (all programs)
+</code></pre>
+
+<h2>Verification</h2>
+
+<pre><code>
+./cforge test          # must pass
+./cforge machine-test  # included in test
+curl http://127.0.0.1:8080/health
+</code></pre>
+
+<h2>Definition of “100%” for CForge the product</h2>
+
+<table>
+<tr><th>Scope</th><th>0.1</th></tr>
+<table>
+<tr><th>Documented language subset</th><th>**100%**</th></tr>
+<table>
+<tr><th>Documented server + runtime</th><th>**100%**</th></tr>
+<table>
+<tr><th>Documented machine backend (stated limits)</th><th>**100%**</th></tr>
+<table>
+<tr><th>Entire original backend design doc</th><th>**~35%**</th></tr>
+<table>
+<tr><th>Rust/Clang-class language + ecosystem</th><th>**Not claimed**</th></tr>
+
+<p>CForge 0.1 is **complete for its documented scope**. Expanding scope increases the roadmap, not a bug in 0.1.</p>
+<footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
+</main>
+</div>
+</body>
+</html>

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Toolchain commands — CForge</title>
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="logo" href="../index.html">CForge</a>
+<section><h2>Learn</h2><ul>
+<li><a href="../learn/introduction.html">Introduction</a></li>
+<li><a href="../learn/install.html">Installation</a></li>
+<li><a href="../learn/first-program.html">First program</a></li>
+<li><a href="../learn/language.html">Language reference</a></li>
+<li><a href="../learn/memory.html">Memory &amp; slices</a></li>
+<li><a href="../learn/compiler.html">Compiler</a></li>
+<li><a href="../learn/runtime.html">Runtime &amp; HTTP</a></li>
+<li><a href="../learn/machine.html">Machine backend</a></li>
+</ul></section>
+<section><h2>Reference</h2><ul>
+<li><a href="../reference/toolchain.html">Toolchain commands</a></li>
+<li><a href="../reference/runtime-api.html">Runtime API</a></li>
+<li><a href="../reference/environment.html">Environment</a></li>
+<li><a href="../reference/safety.html">Safety modes</a></li>
+</ul></section>
+<section><h2>Project</h2><ul>
+<li><a href="../status.html">Implementation status</a></li>
+<li><a href="https://github.com/sumesh-s-dev/cforge">GitHub</a></li>
+</ul></section>
+</nav>
+<main><h1>Toolchain commands</h1>
+
+<p>All commands run from the repository root via <code>./cforge</code>.</p>
+
+<table>
+<tr><th>Command</th><th>Description</th></tr>
+<table>
+<tr><th>`build`</th><th>Server backend: `.cforge` → C → `build/cforge-users`</th></tr>
+<table>
+<tr><th>`check`</th><th>Parse and emit `build/users.gen.c` without linking</th></tr>
+<table>
+<tr><th>`run`</th><th>Build and replace process with server binary</th></tr>
+<table>
+<tr><th>`test`</th><th>Integration tests (HTTP + TLS + machine ELF)</th></tr>
+<table>
+<tr><th>`deploy`</th><th>Build, install systemd user unit, health check</th></tr>
+<table>
+<tr><th>`status`</th><th>GET `/health` and `/metrics` on port 8080</th></tr>
+<table>
+<tr><th>`all`</th><th>`test` + `deploy` + `status` + git publish script</th></tr>
+<table>
+<tr><th>`machine &lt;file&gt; [-o path]`</th><th>Native ELF backend</th></tr>
+<table>
+<tr><th>`machine-test`</th><th>Verify mach/add and mach/expr exit codes</th></tr>
+
+<h2>Scripts</h2>
+
+<table>
+<tr><th>Script</th><th>Purpose</th></tr>
+<table>
+<tr><th>`scripts/publish-github.sh`</th><th>Push to github.com/sumesh-s-dev/cforge</th></tr>
+<table>
+<tr><th>`scripts/do-all.sh`</th><th>Same as `cforge all`</th></tr>
+<table>
+<tr><th>`docs/build_docs.py`</th><th>Regenerate static HTML docs</th></tr>
+
+<h2>CI</h2>
+
+<p>GitHub Actions workflow <code>.github/workflows/ci.yml</code> runs <code>./cforge test</code> on Ubuntu.</p>
+
+<p>Pages deploy: <code>.github/workflows/pages.yml</code> → https://sumesh-s-dev.github.io/cforge/</p>
+<footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
+</main>
+</div>
+</body>
+</html>

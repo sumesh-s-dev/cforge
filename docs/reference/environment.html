@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Environment variables — CForge</title>
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="logo" href="../index.html">CForge</a>
+<section><h2>Learn</h2><ul>
+<li><a href="../learn/introduction.html">Introduction</a></li>
+<li><a href="../learn/install.html">Installation</a></li>
+<li><a href="../learn/first-program.html">First program</a></li>
+<li><a href="../learn/language.html">Language reference</a></li>
+<li><a href="../learn/memory.html">Memory &amp; slices</a></li>
+<li><a href="../learn/compiler.html">Compiler</a></li>
+<li><a href="../learn/runtime.html">Runtime &amp; HTTP</a></li>
+<li><a href="../learn/machine.html">Machine backend</a></li>
+</ul></section>
+<section><h2>Reference</h2><ul>
+<li><a href="../reference/toolchain.html">Toolchain commands</a></li>
+<li><a href="../reference/runtime-api.html">Runtime API</a></li>
+<li><a href="../reference/environment.html">Environment</a></li>
+<li><a href="../reference/safety.html">Safety modes</a></li>
+</ul></section>
+<section><h2>Project</h2><ul>
+<li><a href="../status.html">Implementation status</a></li>
+<li><a href="https://github.com/sumesh-s-dev/cforge">GitHub</a></li>
+</ul></section>
+</nav>
+<main><h1>Environment variables</h1>
+
+<p>Read at process start by the runtime (<code>app_listen</code>).</p>
+
+<table>
+<tr><th>Variable</th><th>Default</th><th>Meaning</th></tr>
+<table>
+<tr><th>`PORT`</th><th>`8080`</th><th>HTTP listen port when `app_listen(0)`</th></tr>
+<table>
+<tr><th>`TLS_PORT`</th><th>`8443`</th><th>TLS port if certs set</th></tr>
+<table>
+<tr><th>`CFORGE_BIND`</th><th>`127.0.0.1`</th><th>IPv4 bind address</th></tr>
+<table>
+<tr><th>`CFORGE_DB`</th><th>`data/users.db`</th><th>SQLite database path</th></tr>
+<table>
+<tr><th>`CFORGE_TLS_CERT`</th><th>unset</th><th>PEM certificate path</th></tr>
+<table>
+<tr><th>`CFORGE_TLS_KEY`</th><th>unset</th><th>PEM private key path</th></tr>
+<table>
+<tr><th>`CFORGE_MAX_CONNS`</th><th>`128`</th><th>Connection slab size (1–4096)</th></tr>
+<table>
+<tr><th>`CFORGE_IDLE_MS`</th><th>`30000`</th><th>Idle connection timeout</th></tr>
+
+<p>Parent directory of <code>CFORGE_DB</code> is created if missing.</p>
+
+<h2>systemd example</h2>
+
+<p>See <code>deploy/cforge-users.service.example</code> — replace <code>__CFORGE_ROOT__</code> with clone path.</p>
+
+<h2>Security</h2>
+
+<p>Default bind is localhost. Use <code>CFORGE_BIND=0.0.0.0</code> only with firewall rules and real TLS certificates.</p>
+
+<p>Private keys are gitignored; generate with <code>./cforge deploy</code> or OpenSSL.</p>
+<footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
+</main>
+</div>
+</body>
+</html>

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Machine backend — CForge</title>
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="logo" href="../index.html">CForge</a>
+<section><h2>Learn</h2><ul>
+<li><a href="../learn/introduction.html">Introduction</a></li>
+<li><a href="../learn/install.html">Installation</a></li>
+<li><a href="../learn/first-program.html">First program</a></li>
+<li><a href="../learn/language.html">Language reference</a></li>
+<li><a href="../learn/memory.html">Memory &amp; slices</a></li>
+<li><a href="../learn/compiler.html">Compiler</a></li>
+<li><a href="../learn/runtime.html">Runtime &amp; HTTP</a></li>
+<li><a href="../learn/machine.html">Machine backend</a></li>
+</ul></section>
+<section><h2>Reference</h2><ul>
+<li><a href="../reference/toolchain.html">Toolchain commands</a></li>
+<li><a href="../reference/runtime-api.html">Runtime API</a></li>
+<li><a href="../reference/environment.html">Environment</a></li>
+<li><a href="../reference/safety.html">Safety modes</a></li>
+</ul></section>
+<section><h2>Project</h2><ul>
+<li><a href="../status.html">Implementation status</a></li>
+<li><a href="https://github.com/sumesh-s-dev/cforge">GitHub</a></li>
+</ul></section>
+</nav>
+<main><h1>Machine backend</h1>
+
+<p>Direct **x86-64** code generation for freestanding Linux ELF executables.</p>
+
+<h2>Register file</h2>
+
+<table>
+<tr><th>CForge</th><th>Hardware (SysV args)</th></tr>
+<table>
+<tr><th>r0</th><th>rdi</th></tr>
+<table>
+<tr><th>r1</th><th>rsi</th></tr>
+<table>
+<tr><th>r2</th><th>rdx</th></tr>
+<table>
+<tr><th>r3</th><th>rcx</th></tr>
+<table>
+<tr><th>r4</th><th>r8</th></tr>
+<table>
+<tr><th>r5</th><th>r9</th></tr>
+<table>
+<tr><th>r6</th><th>r10</th></tr>
+<table>
+<tr><th>r7</th><th>r11</th></tr>
+
+<p>Return value: **r0** copied to **rax** before <code>ret</code>.</p>
+
+<h2>Instructions (0.1)</h2>
+
+<table>
+<tr><th>Mnemonic</th><th>Effect</th></tr>
+<table>
+<tr><th>`mov rD, rS`</th><th>move</th></tr>
+<table>
+<tr><th>`mov rD, imm`</th><th>32-bit immediate</th></tr>
+<table>
+<tr><th>`add rD, rS`</th><th>add</th></tr>
+<table>
+<tr><th>`sub rD, rS`</th><th>subtract</th></tr>
+<table>
+<tr><th>`syscall`</th><th>`syscall` instruction</th></tr>
+<table>
+<tr><th>`ret`</th><th>exit function</th></tr>
+
+<h2>Startup</h2>
+
+<p>Emitted <code>_start</code> calls <code>main</code>, moves result to rdi, <code>syscall</code> exit (60).</p>
+
+<h2>Example</h2>
+
+<pre><code>
+fn main() -&gt; u64 {
+    return add(40, 2);
+}
+
+fn add(a: u64, b: u64) -&gt; u64 {
+    add r0, r1;
+    ret;
+}
+</code></pre>
+
+<pre><code>
+./cforge machine mach/expr.cforge -o /tmp/expr &amp;&amp; /tmp/expr; echo $?
+# 42
+</code></pre>
+
+<h2>Relation to server backend</h2>
+
+<p>The HTTP server does **not** use the machine backend yet. It uses C codegen + runtime. Convergence goal: link runtime as native object code compiled from CForge IR.</p>
+
+<h2>Platform</h2>
+
+<p>Linux x86-64 only in 0.1. ARM64 planned as a second Machine IR target.</p>
+<footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
+</main>
+</div>
+</body>
+</html>

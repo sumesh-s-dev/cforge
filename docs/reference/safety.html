@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Safety modes — CForge</title>
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="logo" href="../index.html">CForge</a>
+<section><h2>Learn</h2><ul>
+<li><a href="../learn/introduction.html">Introduction</a></li>
+<li><a href="../learn/install.html">Installation</a></li>
+<li><a href="../learn/first-program.html">First program</a></li>
+<li><a href="../learn/language.html">Language reference</a></li>
+<li><a href="../learn/memory.html">Memory &amp; slices</a></li>
+<li><a href="../learn/compiler.html">Compiler</a></li>
+<li><a href="../learn/runtime.html">Runtime &amp; HTTP</a></li>
+<li><a href="../learn/machine.html">Machine backend</a></li>
+</ul></section>
+<section><h2>Reference</h2><ul>
+<li><a href="../reference/toolchain.html">Toolchain commands</a></li>
+<li><a href="../reference/runtime-api.html">Runtime API</a></li>
+<li><a href="../reference/environment.html">Environment</a></li>
+<li><a href="../reference/safety.html">Safety modes</a></li>
+</ul></section>
+<section><h2>Project</h2><ul>
+<li><a href="../status.html">Implementation status</a></li>
+<li><a href="https://github.com/sumesh-s-dev/cforge">GitHub</a></li>
+</ul></section>
+</nav>
+<main><h1>Safety modes</h1>
+
+<p>CForge prioritizes **control** over automatic memory safety.</p>
+
+<h2>Release 0.1</h2>
+
+<table>
+<tr><th>Mode</th><th>Status</th></tr>
+<table>
+<tr><th>Explicit pointers and slices</th><th>**Implemented**</th></tr>
+<table>
+<tr><th>Request arena reset</th><th>**Implemented**</th></tr>
+<table>
+<tr><th>`@unsafe` / `@checked` / `@safe` attributes</th><th>**Planned**</th></tr>
+
+<h2>Planned compiler modes</h2>
+
+<h3>@unsafe (default)</h3>
+
+<p>No extra checks. Programmer responsible for lifetimes, data races, and use-after-free.</p>
+
+<h3>@checked (debug / test builds)</h3>
+
+<ul>
+<li>Slice index bounds checks where indexing is added to the language</li>
+<ul>
+<li>Optional arena generation counter to trap use-after-reset in tests</li>
+<ul>
+<li>Sanitizer-friendly build profiles (ASan / UBSan / TSan when linked)</li>
+
+<h3>@safe (application tier lint)</h3>
+
+<ul>
+<li>Static checks for storing request <code>Slice</code> into globals</li>
+<ul>
+<li>Stricter parser limits enforced at compile time</li>
+
+<p>These modes do **not** make CForge Rust. They reduce obvious footguns without a borrow checker.</p>
+
+<h2>What we do not promise</h2>
+
+<ul>
+<li>Freedom from use-after-free or data races in <code>@unsafe</code></li>
+<ul>
+<li>Cryptographic correctness of hand-written Forge crypto (use audited libraries via runtime)</li>
+
+<p>See <a href="../learn/introduction.html">Introduction</a> for philosophy.</p>
+<footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
+</main>
+</div>
+</body>
+</html>

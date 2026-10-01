@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compiler — CForge</title>
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="logo" href="../index.html">CForge</a>
+<section><h2>Learn</h2><ul>
+<li><a href="../learn/introduction.html">Introduction</a></li>
+<li><a href="../learn/install.html">Installation</a></li>
+<li><a href="../learn/first-program.html">First program</a></li>
+<li><a href="../learn/language.html">Language reference</a></li>
+<li><a href="../learn/memory.html">Memory &amp; slices</a></li>
+<li><a href="../learn/compiler.html">Compiler</a></li>
+<li><a href="../learn/runtime.html">Runtime &amp; HTTP</a></li>
+<li><a href="../learn/machine.html">Machine backend</a></li>
+</ul></section>
+<section><h2>Reference</h2><ul>
+<li><a href="../reference/toolchain.html">Toolchain commands</a></li>
+<li><a href="../reference/runtime-api.html">Runtime API</a></li>
+<li><a href="../reference/environment.html">Environment</a></li>
+<li><a href="../reference/safety.html">Safety modes</a></li>
+</ul></section>
+<section><h2>Project</h2><ul>
+<li><a href="../status.html">Implementation status</a></li>
+<li><a href="https://github.com/sumesh-s-dev/cforge">GitHub</a></li>
+</ul></section>
+</nav>
+<main><h1>Compiler</h1>
+
+<p>The **cforge** driver is a Python toolchain that lexes and parses <code>.cforge</code>, then lowers to one of two backends.</p>
+
+<h2>Server backend (default)</h2>
+
+<pre><code>
+app/users.cforge
+    → build/users.gen.c
+    → cc -std=c11 -O2 -Wall -Wextra -Werror
+    → build/cforge-users
+         + runtime/server.c json.c db.c
+         + libsqlite3 libssl libcrypto
+</code></pre>
+
+<p>Entry point configured in <code>cforge.toml</code>:</p>
+
+<pre><code>
+[package]
+name = &quot;users&quot;
+entry = &quot;app/users.cforge&quot;
+</code></pre>
+
+<h3>Commands</h3>
+
+<table>
+<tr><th>Command</th><th>Action</th></tr>
+<table>
+<tr><th>`./cforge build`</th><th>Compile + link server binary</th></tr>
+<table>
+<tr><th>`./cforge check`</th><th>Parse + generate C (no link)</th></tr>
+<table>
+<tr><th>`./cforge run`</th><th>Build and exec binary</th></tr>
+
+<p>Runtime symbols (<code>app_get</code>, <code>db_*</code>, …) are declared in <code>runtime/cforge_rt.h</code> and implemented in C.</p>
+
+<h2>Machine backend</h2>
+
+<pre><code>
+mach/add.cforge
+    → cforge_mach.py
+    → x86-64 opcodes + ELF64 header
+    → executable (no gcc)
+</code></pre>
+
+<table>
+<tr><th>Command</th><th>Action</th></tr>
+<table>
+<tr><th>`./cforge machine file.cforge [-o out]`</th><th>Emit ELF</th></tr>
+<table>
+<tr><th>`./cforge machine-test`</th><th>Run add/expr fixtures</th></tr>
+
+<p>Limits: integer functions, six parameters, no <code>let</code>/<code>if</code> in machine slice yet (see status page).</p>
+
+<h2>Future native compiler</h2>
+
+<p>The long-term architecture is **CForge IR → register allocation → ELF** for all programs, with the C path remaining a bootstrap backend. Release 0.1 ships both pipelines; only the machine path is gcc-free.</p>
+
+<h2>Diagnostics</h2>
+
+<p>Errors are <code>compile error: line: message</code> on stderr with non-zero exit.</p>
+<footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
+</main>
+</div>
+</body>
+</html>

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Memory and slices — CForge</title>
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="logo" href="../index.html">CForge</a>
+<section><h2>Learn</h2><ul>
+<li><a href="../learn/introduction.html">Introduction</a></li>
+<li><a href="../learn/install.html">Installation</a></li>
+<li><a href="../learn/first-program.html">First program</a></li>
+<li><a href="../learn/language.html">Language reference</a></li>
+<li><a href="../learn/memory.html">Memory &amp; slices</a></li>
+<li><a href="../learn/compiler.html">Compiler</a></li>
+<li><a href="../learn/runtime.html">Runtime &amp; HTTP</a></li>
+<li><a href="../learn/machine.html">Machine backend</a></li>
+</ul></section>
+<section><h2>Reference</h2><ul>
+<li><a href="../reference/toolchain.html">Toolchain commands</a></li>
+<li><a href="../reference/runtime-api.html">Runtime API</a></li>
+<li><a href="../reference/environment.html">Environment</a></li>
+<li><a href="../reference/safety.html">Safety modes</a></li>
+</ul></section>
+<section><h2>Project</h2><ul>
+<li><a href="../status.html">Implementation status</a></li>
+<li><a href="https://github.com/sumesh-s-dev/cforge">GitHub</a></li>
+</ul></section>
+</nav>
+<main><h1>Memory and slices</h1>
+
+<p>CForge services use **fixed buffers** and **request arenas**. There is no garbage collector on the hot path.</p>
+
+<h2>Per-connection layout</h2>
+
+<pre><code>
+Connection
+ ├── in_buf     (read buffer, HTTP + body)
+ ├── out_buf    (response bytes)
+ └── arena      (bump allocator, reset each request)
+</code></pre>
+
+<p>Default sizes are documented in <code>runtime/internal.h</code> (<code>CFORGE_MAX_HEADER</code>, <code>CFORGE_MAX_BODY</code>, <code>CFORGE_ARENA</code>, etc.).</p>
+
+<h2>Request lifetime</h2>
+
+<pre><code>
+read bytes → parse HTTP → handler runs
+    → slices point into in_buf or arena
+    → response written to out_buf
+    → arena.reset()
+    → db checkout released
+</code></pre>
+
+<p>Anything allocated in the **arena** dies at <code>arena.reset()</code>. Do not store arena <code>Slice</code> values in globals.</p>
+
+<h2>Slice rules</h2>
+
+<table>
+<tr><th>Operation</th><th>Allocates?</th></tr>
+<table>
+<tr><th>`Slice` from string literal</th><th>No (static bytes)</th></tr>
+<table>
+<tr><th>JSON string into arena</th><th>Yes (arena bump)</th></tr>
+<table>
+<tr><th>SQL text column into arena</th><th>Yes (copy for reuse of wire buffer)</th></tr>
+<table>
+<tr><th>`ctx_json_*` output</th><th>Written to `out_buf`</th></tr>
+
+<p>Database functions copy text into <code>ctx-&gt;arena</code> because the SQLite statement buffer is reused.</p>
+
+<h2>Stack</h2>
+
+<p>Locals (<code>let x: u64 = 0</code>) live on the C stack for the duration of the handler call.</p>
+
+<h2>Safety modes (planned)</h2>
+
+<p>See <a href="../reference/safety.html">Safety modes</a>: <code>@unsafe</code>, <code>@checked</code>, <code>@safe</code> as compile modes — not enforced in 0.1 beyond explicit coding discipline.</p>
+
+<h2>Further reading</h2>
+
+<p>Repository: <code>END-TO-END.md</code> — full request/response lifecycle.</p>
+<footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
+</main>
+</div>
+</body>
+</html>

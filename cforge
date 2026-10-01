@@ -517,6 +517,13 @@ def cc_cmd(out_bin):
     ]
 
 
+def check_only():
+    out_c = os.path.join(ROOT, "build", "users.gen.c")
+    compile_cforge(read_entry(), out_c)
+    print("ok %s" % out_c)
+    return out_c
+
+
 def build():
     out_c = os.path.join(ROOT, "build", "users.gen.c")
     out_bin = os.path.join(ROOT, "build", "cforge-users")
@@ -871,6 +878,8 @@ def main(argv):
     cmd = argv[1] if len(argv) > 1 else "help"
     if cmd == "build":
         print(build())
+    elif cmd == "check":
+        check_only()
     elif cmd == "run":
         bin_path = build()
         os.execv(bin_path, [bin_path])
@@ -887,7 +896,7 @@ def main(argv):
     elif cmd == "machine-test":
         machine_test()
     else:
-        print("usage: cforge build | run | test | deploy | status | all | machine | machine-test")
+        print("usage: cforge build | check | run | test | deploy | status | all | machine | machine-test")
         if cmd != "help":
             return 2
     return 0

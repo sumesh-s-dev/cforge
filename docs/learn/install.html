@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Installation — CForge</title>
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="logo" href="../index.html">CForge</a>
+<section><h2>Learn</h2><ul>
+<li><a href="../learn/introduction.html">Introduction</a></li>
+<li><a href="../learn/install.html">Installation</a></li>
+<li><a href="../learn/first-program.html">First program</a></li>
+<li><a href="../learn/language.html">Language reference</a></li>
+<li><a href="../learn/memory.html">Memory &amp; slices</a></li>
+<li><a href="../learn/compiler.html">Compiler</a></li>
+<li><a href="../learn/runtime.html">Runtime &amp; HTTP</a></li>
+<li><a href="../learn/machine.html">Machine backend</a></li>
+</ul></section>
+<section><h2>Reference</h2><ul>
+<li><a href="../reference/toolchain.html">Toolchain commands</a></li>
+<li><a href="../reference/runtime-api.html">Runtime API</a></li>
+<li><a href="../reference/environment.html">Environment</a></li>
+<li><a href="../reference/safety.html">Safety modes</a></li>
+</ul></section>
+<section><h2>Project</h2><ul>
+<li><a href="../status.html">Implementation status</a></li>
+<li><a href="https://github.com/sumesh-s-dev/cforge">GitHub</a></li>
+</ul></section>
+</nav>
+<main><h1>Installation</h1>
+
+<h2>Requirements</h2>
+
+<table>
+<tr><th>Component</th><th>Server path</th><th>Machine path</th></tr>
+<table>
+<tr><th>Python 3</th><th>yes (compiler driver)</th><th>yes</th></tr>
+<table>
+<tr><th>GCC or Clang</th><th>yes</th><th>no</th></tr>
+<table>
+<tr><th>pkg-config + libsqlite3</th><th>yes</th><th>no</th></tr>
+<table>
+<tr><th>OpenSSL dev libs</th><th>yes (TLS)</th><th>no</th></tr>
+<table>
+<tr><th>Linux x86-64</th><th>yes</th><th>yes</th></tr>
+
+<h2>Clone and verify</h2>
+
+<pre><code>
+git clone git@github.com:sumesh-s-dev/cforge.git
+cd cforge
+./cforge test
+</code></pre>
+
+<p>You should see <code>ok 14 checks</code> and machine ELF tests.</p>
+
+<h2>Build the users service</h2>
+
+<pre><code>
+./cforge build
+# → build/cforge-users
+</code></pre>
+
+<h2>Optional: systemd deploy (localhost)</h2>
+
+<pre><code>
+./cforge deploy
+curl http://127.0.0.1:8080/health
+</code></pre>
+
+<p>TLS on <code>https://127.0.0.1:8443</code> uses self-signed certs under <code>deploy/</code> (created on first deploy).</p>
+
+<h2>Publish documentation locally</h2>
+
+<pre><code>
+python3 docs/build_docs.py
+# open docs/index.html in a browser
+</code></pre>
+
+<p>Public docs URL after GitHub Pages deploy: **https://sumesh-s-dev.github.io/cforge/**</p>
+
+<h2>Environment overview</h2>
+
+<p>See <a href="../reference/environment.html">Environment variables</a> for <code>CFORGE_*</code> and <code>PORT</code>.</p>
+<footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
+</main>
+</div>
+</body>
+</html>

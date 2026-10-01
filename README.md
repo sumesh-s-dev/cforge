@@ -1,6 +1,10 @@
 # CForge
 
-Low-level systems language prototype with two compile paths:
+Low-level systems language prototype with **dual compilers** (C server backend + native x86-64 ELF), epoll HTTP service, and explicit memory.
+
+**Documentation:** https://sumesh-s-dev.github.io/cforge/
+
+**Repository:** https://github.com/sumesh-s-dev/cforge
 
 | Path | Command | Output |
 |---|---|---|
@@ -35,7 +39,9 @@ Set `CFORGE_BIND=127.0.0.1` by default. TLS uses self-signed certs under `deploy
 
 ## Documentation
 
-See [END-TO-END.md](./END-TO-END.md) for architecture, memory model, request lifecycle, environment variables, and scope limits.
+- **Book (web):** https://sumesh-s-dev.github.io/cforge/
+- **Service deep-dive:** [END-TO-END.md](./END-TO-END.md)
+- **Regenerate site:** `python3 docs/build_docs.py`
 
 ## Layout
 

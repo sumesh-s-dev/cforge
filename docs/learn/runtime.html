@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Runtime and HTTP — CForge</title>
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="logo" href="../index.html">CForge</a>
+<section><h2>Learn</h2><ul>
+<li><a href="../learn/introduction.html">Introduction</a></li>
+<li><a href="../learn/install.html">Installation</a></li>
+<li><a href="../learn/first-program.html">First program</a></li>
+<li><a href="../learn/language.html">Language reference</a></li>
+<li><a href="../learn/memory.html">Memory &amp; slices</a></li>
+<li><a href="../learn/compiler.html">Compiler</a></li>
+<li><a href="../learn/runtime.html">Runtime &amp; HTTP</a></li>
+<li><a href="../learn/machine.html">Machine backend</a></li>
+</ul></section>
+<section><h2>Reference</h2><ul>
+<li><a href="../reference/toolchain.html">Toolchain commands</a></li>
+<li><a href="../reference/runtime-api.html">Runtime API</a></li>
+<li><a href="../reference/environment.html">Environment</a></li>
+<li><a href="../reference/safety.html">Safety modes</a></li>
+</ul></section>
+<section><h2>Project</h2><ul>
+<li><a href="../status.html">Implementation status</a></li>
+<li><a href="https://github.com/sumesh-s-dev/cforge">GitHub</a></li>
+</ul></section>
+</nav>
+<main><h1>Runtime and HTTP</h1>
+
+<p>The **runtime** is a C library: epoll event loop, HTTP/1.1 parser, router, JSON helper, SQLite access, optional TLS 1.3 (OpenSSL).</p>
+
+<p>Application code never calls <code>epoll</code> directly in 0.1 — it calls <code>app_listen</code> and handler helpers.</p>
+
+<h2>Starting the server</h2>
+
+<pre><code>
+fn main() -&gt; i32 {
+    app_get(&quot;/health&quot;, health);
+    app_post(&quot;/users&quot;, post_user);
+    return app_listen(0);
+}
+</code></pre>
+
+<p>Routes are registered at startup (fixed table, max 64 routes). Parameters: <code>/users/:id</code> → <code>ctx_param_u64(ctx, 0, &amp;id)</code>.</p>
+
+<h2>Handler context</h2>
+
+<p>Handlers receive <code>*Ctx</code> with:</p>
+
+<ul>
+<li>parsed path and body as <code>Slice</code></li>
+<ul>
+<li>request arena for decoded strings</li>
+<ul>
+<li>output buffer via <code>ctx_json_*</code>, <code>ctx_text</code>, <code>ctx_status</code></li>
+
+<h2>HTTP features (0.1)</h2>
+
+<table>
+<tr><th>Feature</th><th>Supported</th></tr>
+<table>
+<tr><th>GET POST DELETE</th><th>yes</th></tr>
+<table>
+<tr><th>HTTP/1.0 / 1.1</th><th>yes</th></tr>
+<table>
+<tr><th>Keep-alive, pipelining</th><th>yes</th></tr>
+<table>
+<tr><th>Content-Length bodies</th><th>yes</th></tr>
+<table>
+<tr><th>Chunked request bodies</th><th>no (501)</th></tr>
+<table>
+<tr><th>HTTP/2 / 3</th><th>no</th></tr>
+
+<h2>Backpressure</h2>
+
+<ul>
+<li>Full connection slab → stop accepting</li>
+<ul>
+<li>Full read buffer → drop EPOLLIN</li>
+<ul>
+<li>Write EAGAIN → EPOLLOUT</li>
+
+<h2>TLS</h2>
+
+<p>When <code>CFORGE_TLS_CERT</code> and <code>CFORGE_TLS_KEY</code> are set, a second listener serves TLS 1.3 only.</p>
+
+<h2>Full specification</h2>
+
+<p>See repository <code>END-TO-END.md</code> for byte-level lifecycle, error codes, and shutdown (<code>SIGTERM</code>).</p>
+
+<h2>Runtime API</h2>
+
+<p><a href="../reference/runtime-api.html">Runtime API reference</a></p>
+<footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
+</main>
+</div>
+</body>
+</html>

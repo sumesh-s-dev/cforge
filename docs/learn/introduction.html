@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Introduction — CForge</title>
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="logo" href="../index.html">CForge</a>
+<section><h2>Learn</h2><ul>
+<li><a href="../learn/introduction.html">Introduction</a></li>
+<li><a href="../learn/install.html">Installation</a></li>
+<li><a href="../learn/first-program.html">First program</a></li>
+<li><a href="../learn/language.html">Language reference</a></li>
+<li><a href="../learn/memory.html">Memory &amp; slices</a></li>
+<li><a href="../learn/compiler.html">Compiler</a></li>
+<li><a href="../learn/runtime.html">Runtime &amp; HTTP</a></li>
+<li><a href="../learn/machine.html">Machine backend</a></li>
+</ul></section>
+<section><h2>Reference</h2><ul>
+<li><a href="../reference/toolchain.html">Toolchain commands</a></li>
+<li><a href="../reference/runtime-api.html">Runtime API</a></li>
+<li><a href="../reference/environment.html">Environment</a></li>
+<li><a href="../reference/safety.html">Safety modes</a></li>
+</ul></section>
+<section><h2>Project</h2><ul>
+<li><a href="../status.html">Implementation status</a></li>
+<li><a href="https://github.com/sumesh-s-dev/cforge">GitHub</a></li>
+</ul></section>
+</nav>
+<main><h1>Introduction</h1>
+
+<p>CForge is a systems programming language prototype. The goal is **machine-level control** without a mandatory garbage collector, hidden allocations, or heavyweight async runtime.</p>
+
+<h2>Design principles</h2>
+
+<ul>
+<li>**No hidden work** — allocation, syscalls, and buffer lifetimes are visible.</li>
+<ul>
+<li>**Libraries, not language features** — HTTP, JSON, TLS, and SQL are runtime code you link, not syntax built into the compiler.</li>
+<ul>
+<li>**Two backends** — rapid iteration through C codegen; native ELF for registers and syscalls on x86-64.</li>
+<ul>
+<li>**Explicit memory** — connection buffers, request arenas, and <code>Slice</code> views; reset arenas per request instead of GC.</li>
+
+<h2>What CForge is not</h2>
+
+<p>CForge is **not** a memory-safe language like Rust. It does **not** replace PostgreSQL, Kubernetes, or a full package ecosystem in release 0.1. See <a href="../status.html">Implementation status</a> for the exact matrix.</p>
+
+<h2>Architecture</h2>
+
+<pre><code>
+Application (.cforge)
+        ↓
+Runtime API (Slice, Ctx, app_listen, db_*)
+        ↓
+C runtime (epoll, HTTP, SQLite, OpenSSL)
+        ↓
+Linux kernel
+</code></pre>
+
+<p>The <a href="machine.html">machine backend</a> bypasses C codegen for small programs and emits ELF directly.</p>
+
+<h2>Comparison</h2>
+
+<table>
+<tr><th></th><th>CForge</th><th>C</th><th>Rust</th></tr>
+<table>
+<tr><th>Control</th><th>High</th><th>High</th><th>High</th></tr>
+<table>
+<tr><th>Hidden runtime</th><th>None required</th><th>None</th><th>Minimal</th></tr>
+<table>
+<tr><th>Memory safety</th><th>Programmer + optional modes</th><th>Programmer</th><th>Compiler</th></tr>
+<table>
+<tr><th>Backend in 0.1</th><th>C + partial native</th><th>Native</th><th>Native</th></tr>
+
+<h2>Next steps</h2>
+
+<p><a href="install.html">Install CForge</a> and write your <a href="first-program.html">first program</a>.</p>
+<footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
+</main>
+</div>
+</body>
+</html>
