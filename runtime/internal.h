@@ -44,6 +44,7 @@ int cforge_db_open(const char *path);
 void cforge_db_close(void);
 void cforge_db_release(void);
 uint64_t cforge_db_errors(void);
+const char *cforge_db_backend(void);
 
 int cforge_queue(Ctx *ctx, int status, const char *ctype, const void *body, size_t len, const char *extra);
 

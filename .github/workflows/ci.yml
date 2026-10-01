@@ -12,7 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install deps
-        run: sudo apt-get update && sudo apt-get install -y gcc libsqlite3-dev libssl-dev openssl pkg-config
+        run: sudo apt-get update && sudo apt-get install -y gcc libsqlite3-dev libssl-dev libpq-dev openssl pkg-config
       - name: Server tests
         run: ./cforge test
       - name: Machine tests

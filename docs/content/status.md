@@ -21,13 +21,14 @@ Public site: **https://sumesh-s-dev.github.io/cforge/**
 | **`cforge.lock`** (`./cforge package`) | Done |
 | Toolchain (build, check, test, deploy, all, machine) | Done |
 | GitHub CI + Pages docs | Done |
-| Example service + END-TO-END guide | Done |
+| **Docker Compose deploy** (Postgres + app) | Done (`./cforge deploy-docker`) |
+| **End-to-end deploy** (test + systemd + smoke) | Done (`./cforge e2e`) |
 
 ## Planned (spec describes; code follows)
 
 | Area | Spec | Code |
 |---|---|---|
-| PostgreSQL wire / libpq | Documented | Planned |
+| PostgreSQL wire / libpq | Documented | **Shipped** (`CFORGE_PG_DSN`) |
 | HTTP/2, HTTP/3, WebSockets | Documented | Planned |
 | Native IR compiler for server | Documented | In progress (`cforge_mach`) |
 | Redis / Kafka / NATS clients | Documented | Planned |

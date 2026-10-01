@@ -1,3 +1,7 @@
+fn ready(ctx: *Ctx) -> i32 {
+    return ctx_text(ctx, 200, "ready");
+}
+
 fn health(ctx: *Ctx) -> i32 {
     return ctx_text(ctx, 200, "ok");
 }
@@ -64,6 +68,7 @@ fn delete_user(ctx: *Ctx) -> i32 {
 
 fn main() -> i32 {
     app_get("/health", health);
+    app_get("/ready", ready);
     app_get("/metrics", metrics);
     app_get("/users/:id", get_user);
     app_post("/users", post_user);

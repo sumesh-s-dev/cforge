@@ -162,6 +162,8 @@ Commands:
 ./cforge run       build, then replace this process with the binary
 ./cforge test      build, start on ports 18081 and 18443, run 14 checks, SIGTERM
 ./cforge deploy    build, write the user unit, enable and start it, wait for /health
+./cforge e2e       test, deploy, full users API smoke on :8080
+./cforge deploy-docker   Docker Compose: Postgres + app on :8080 (needs Docker)
 ./cforge status    GET /health and GET /metrics on port 8080
 ```
 

@@ -238,11 +238,11 @@ int32_t ctx_json_id(Ctx *ctx, int32_t status, uint64_t id) {
 }
 
 int32_t ctx_metrics(Ctx *ctx) {
-    char body[256];
+    char body[320];
     int n = snprintf(body, sizeof body,
-                     "requests_total %llu\nactive_connections %llu\ndb_errors %llu\naccept_paused %d\n",
+                     "requests_total %llu\nactive_connections %llu\ndb_errors %llu\naccept_paused %d\ndb_backend %s\n",
                      (unsigned long long)g_requests, (unsigned long long)g_active,
-                     (unsigned long long)cforge_db_errors(), g_paused);
+                     (unsigned long long)cforge_db_errors(), g_paused, cforge_db_backend());
     if (n < 0 || (size_t)n >= sizeof body) return -1;
     return cforge_queue(ctx, 200, "text/plain; charset=utf-8", body, (size_t)n, NULL);
 }
