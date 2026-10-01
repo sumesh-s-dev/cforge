@@ -38,4 +38,10 @@ HTTP/2–3, Kafka/NATS, JWT/OAuth, full `@safe`, package registry, native IR **s
 
 ## Honest pitch
 
-CForge 0.1 is a **backend DSL + runtime demo**. The spec is a **north star**; the binary is the users microservice path in [END-TO-END.md](https://github.com/sumesh-s-dev/cforge/blob/main/END-TO-END.md).
+CForge 0.1 is a **backend DSL + runtime demo** with a **strong architecture skeleton** and a **prototype compiler**. The spec is a **north star**; the next technical depth is **semantics** (ownership/lifetimes, IR), not more optional integrations before that.
+
+## What we are not claiming
+
+- A production-ready **general-purpose** systems language (vs C/Rust/Zig)
+- **Memory safety** enforced by the compiler today
+- That the **machine backend** is more than a teaching/demo second target

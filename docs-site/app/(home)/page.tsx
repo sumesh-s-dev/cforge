@@ -4,14 +4,15 @@ export default function HomePage() {
   return (
     <div className="mx-auto flex max-w-3xl flex-1 flex-col justify-center px-6 py-16">
       <p className="mb-3 text-sm font-medium uppercase tracking-widest text-fd-muted-foreground">
-        Systems language
+        Backend DSL &amp; systems-language experiment
       </p>
       <h1 className="mb-4 text-4xl font-semibold tracking-tight text-fd-foreground md:text-5xl">
         CForge
       </h1>
       <p className="mb-8 max-w-xl text-lg leading-relaxed text-fd-muted-foreground">
-        Dual compilers, epoll HTTP/TLS/SQLite service, and a full backend specification — close to
-        the metal, with a runnable vertical slice in this repo.
+        A low-level backend DSL and systems-language experiment. CForge compiles a small typed
+        language to C11 today, with an experimental native x86-64 backend. Its runtime provides
+        bounded-memory HTTP/TLS/SQLite services on Linux — not a Rust/C competitor yet.
       </p>
       <div className="flex flex-wrap gap-3">
         <Link

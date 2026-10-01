@@ -1,6 +1,12 @@
 # Introduction
 
-CForge is a systems programming language prototype. The goal is **machine-level control** without a mandatory garbage collector, hidden allocations, or heavyweight async runtime.
+CForge is a **backend DSL and systems-language experiment** (release 0.1). The runnable piece is a tiny typed language plus a **C runtime** that owns networking, HTTP, TLS, JSON parsing, and storage — handlers express policy; the runtime owns mechanism.
+
+We are **not** claiming memory safety like Rust: `Slice`/`Ctx` lifetime rules are documented and partially checked, but **`@safe` is not enforced yet**. See [Safety modes](../reference/safety.html).
+
+## What we optimize for (direction C)
+
+A **backend systems niche**: small handler code, predictable request memory (arenas + slabs), integer error codes, and a stable `int32_t handler(Ctx *)` ABI — not a full general-purpose language yet.
 
 ## Design principles
 

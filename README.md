@@ -1,6 +1,8 @@
 # CForge
 
-**Backend DSL (0.1 demo)** that lowers handlers to C, plus an epoll **HTTP/TLS users service**. The [design spec](https://sumesh-s-dev.github.io/cforge/docs/spec/) describes a larger ecosystem; this repo ships the vertical slice.
+**A low-level backend DSL and systems-language experiment.** CForge compiles a small typed language to **C11** today, with an **experimental x86-64 ELF** backend. The **runtime** owns HTTP/TLS/SQLite (bounded memory on Linux); application code stays in `.cforge` handlers.
+
+The [design spec](https://sumesh-s-dev.github.io/cforge/docs/spec/) is a north star — not a claim that every chapter is implemented. See [status](https://sumesh-s-dev.github.io/cforge/docs/status/).
 
 **Documentation:** https://sumesh-s-dev.github.io/cforge/docs/
 

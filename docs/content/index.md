@@ -1,6 +1,6 @@
 # CForge
 
-<p class="hero">Small backend DSL (compiles to C) plus an epoll HTTP/TLS/SQLite users service. Full ecosystem design is documented; most of it is roadmap.</p>
+<p class="hero">A low-level <strong>backend DSL</strong> and systems-language experiment: small typed language → C11 (plus experimental x86-64 ELF), with a bounded-memory HTTP/TLS/SQLite runtime on Linux. Not a general-purpose Rust/C competitor in 0.1.</p>
 
 ## Documentation
 
