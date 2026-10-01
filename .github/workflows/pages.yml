@@ -7,15 +7,9 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: false
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,11 +21,12 @@ jobs:
         run: |
           rm -rf _site
           mkdir -p _site
-          cp docs/.nojekyll _site/ 2>/dev/null || touch _site/.nojekyll
+          cp docs/.nojekyll _site/
           cp docs/index.html docs/status.html docs/404.html _site/
           cp -r docs/assets docs/learn docs/reference docs/spec _site/
 
-      - name: Set repository About (description + homepage)
+      - name: Update repository About (description + homepage)
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -40,31 +35,10 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${{ github.repository }}" \
             -d '{"description":"Low-level CForge language: dual compiler, epoll HTTP/TLS/SQLite server, full backend specification.","homepage":"https://sumesh-s-dev.github.io/cforge/"}'
-          curl -fsS -X PUT \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/topics" \
-            -d '{"names":["c","compiler","systems-programming","http-server","programming-language"]}' || true
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: _site
-
-      - name: Deploy gh-pages branch (fallback)
+      - name: Deploy gh-pages branch
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ github.token }}
           publish_dir: _site
           force_orphan: true
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
