@@ -1,0 +1,6 @@
+[package]
+name = "users"
+entry = "app/users.cforge"
+
+[profile.server]
+opt = "speed"

@@ -1,0 +1,19 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps
+        run: sudo apt-get update && sudo apt-get install -y gcc libsqlite3-dev libssl-dev openssl pkg-config
+      - name: Server tests
+        run: ./cforge test
+      - name: Machine tests
+        run: ./cforge machine-test

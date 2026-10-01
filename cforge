@@ -1,0 +1,889 @@
+#!/usr/bin/env python3
+"""CForge compiler and toolchain for the users-service vertical slice.
+
+The language subset lowers to C, then to a native binary linked with the
+epoll runtime. HTTP, JSON, and SQLite stay in that runtime, not in the language.
+"""
+
+import os
+import shutil
+import signal
+import socket
+import ssl
+import subprocess
+import sys
+import textwrap
+import time
+import urllib.error
+import urllib.request
+
+ROOT = os.path.dirname(os.path.abspath(__file__))
+
+KEYWORDS = {"fn", "let", "if", "else", "while", "return", "struct"}
+RUNTIME = {
+    "slice_empty",
+    "ctx_param_u64",
+    "ctx_status",
+    "ctx_text",
+    "ctx_json_user",
+    "ctx_json_id",
+    "ctx_metrics",
+    "json_parse_create",
+    "db_get_user",
+    "db_insert_user",
+    "db_delete_user",
+    "app_get",
+    "app_post",
+    "app_delete",
+    "app_listen",
+}
+BASE_TYPES = {
+    "i32": "int32_t",
+    "u32": "uint32_t",
+    "u64": "uint64_t",
+    "i64": "int64_t",
+    "u16": "uint16_t",
+    "u8": "uint8_t",
+    "bool": "int32_t",
+    "Slice": "Slice",
+    "Ctx": "Ctx",
+}
+
+
+class CompileError(Exception):
+    pass
+
+
+class Tok:
+    def __init__(self, kind, value, line):
+        self.kind = kind
+        self.value = value
+        self.line = line
+
+
+def lex(src):
+    tokens = []
+    i = 0
+    line = 1
+    n = len(src)
+    while i < n:
+        c = src[i]
+        if c == "\n":
+            line += 1
+            i += 1
+            continue
+        if c in " \t\r":
+            i += 1
+            continue
+        if c == "/" and i + 1 < n and src[i + 1] == "/":
+            while i < n and src[i] != "\n":
+                i += 1
+            continue
+        if c == '"':
+            i += 1
+            chars = []
+            while i < n and src[i] != '"':
+                if src[i] == "\n":
+                    raise CompileError(f"{line}: newline in string")
+                if src[i] == "\\":
+                    i += 1
+                    if i >= n:
+                        raise CompileError(f"{line}: bad escape")
+                    esc = src[i]
+                    mapping = {"n": "\n", "t": "\t", "r": "\r", '"': '"', "\\": "\\", "/": "/"}
+                    if esc not in mapping:
+                        raise CompileError(f"{line}: bad escape")
+                    chars.append(mapping[esc])
+                else:
+                    chars.append(src[i])
+                i += 1
+            if i >= n or src[i] != '"':
+                raise CompileError(f"{line}: unterminated string")
+            i += 1
+            tokens.append(Tok("str", "".join(chars), line))
+            continue
+        if c.isdigit():
+            start = i
+            while i < n and src[i].isdigit():
+                i += 1
+            tokens.append(Tok("num", src[start:i], line))
+            continue
+        if c.isalpha() or c == "_":
+            start = i
+            while i < n and (src[i].isalnum() or src[i] == "_"):
+                i += 1
+            word = src[start:i]
+            kind = "kw" if word in KEYWORDS else "ident"
+            tokens.append(Tok(kind, word, line))
+            continue
+        two = src[i : i + 2]
+        if two in ("==", "!=", "<=", ">=", "->"):
+            tokens.append(Tok(two, two, line))
+            i += 2
+            continue
+        if c in "(){}[],;:.=+-*/<>&!":
+            tokens.append(Tok(c, c, line))
+            i += 1
+            continue
+        raise CompileError(f"{line}: unexpected {c!r}")
+    tokens.append(Tok("eof", "", line))
+    return tokens
+
+
+class Parser:
+    def __init__(self, tokens):
+        self.toks = tokens
+        self.i = 0
+
+    def cur(self):
+        return self.toks[self.i]
+
+    def at(self, kind, value=None):
+        t = self.cur()
+        if t.kind != kind:
+            return False
+        if value is not None and t.value != value:
+            return False
+        return True
+
+    def eat(self, kind, value=None):
+        if not self.at(kind, value):
+            t = self.cur()
+            raise CompileError(f"{t.line}: expected {value or kind}, got {t.kind} {t.value}")
+        t = self.cur()
+        self.i += 1
+        return t
+
+    def parse(self):
+        fns = []
+        while not self.at("eof"):
+            fns.append(self.parse_fn())
+        if not any(fn["name"] == "main" for fn in fns):
+            raise CompileError("missing main")
+        return fns
+
+    def parse_fn(self):
+        line = self.eat("kw", "fn").line
+        name = self.eat("ident").value
+        self.eat("(")
+        params = []
+        if not self.at(")"):
+            params.append(self.parse_param())
+            while self.at(","):
+                self.eat(",")
+                params.append(self.parse_param())
+        self.eat(")")
+        self.eat("->")
+        ret = self.parse_type()
+        body = self.parse_block()
+        return {"name": name, "params": params, "ret": ret, "body": body, "line": line}
+
+    def parse_param(self):
+        name = self.eat("ident").value
+        self.eat(":")
+        return {"name": name, "type": self.parse_type()}
+
+    def parse_type(self):
+        stars = 0
+        while self.at("*"):
+            self.eat("*")
+            stars += 1
+        name = self.eat("ident").value
+        if name not in BASE_TYPES:
+            raise CompileError(f"unknown type {name}")
+        return {"name": name, "stars": stars}
+
+    def parse_block(self):
+        self.eat("{")
+        stmts = []
+        while not self.at("}"):
+            stmts.append(self.parse_stmt())
+        self.eat("}")
+        return stmts
+
+    def parse_stmt(self):
+        if self.at("ident") and self.cur().value in ("add", "sub", "mov", "ret", "syscall"):
+            nxt = self.toks[self.i + 1]
+            if nxt.kind != "(":
+                return self.parse_insn()
+        if self.at("kw", "return"):
+            line = self.eat("kw", "return").line
+            expr = self.parse_expr()
+            self.eat(";")
+            return {"op": "return", "expr": expr, "line": line}
+        if self.at("kw", "let"):
+            line = self.eat("kw", "let").line
+            name = self.eat("ident").value
+            self.eat(":")
+            typ = self.parse_type()
+            self.eat("=")
+            expr = self.parse_expr()
+            self.eat(";")
+            return {"op": "let", "name": name, "type": typ, "expr": expr, "line": line}
+        if self.at("kw", "if"):
+            return self.parse_if()
+        if self.at("kw", "while"):
+            line = self.eat("kw", "while").line
+            cond = self.parse_expr()
+            body = self.parse_block()
+            return {"op": "while", "cond": cond, "body": body, "line": line}
+        line = self.cur().line
+        expr = self.parse_expr()
+        self.eat(";")
+        return {"op": "expr", "expr": expr, "line": line}
+
+    def parse_insn(self):
+        line = self.cur().line
+        mnem = self.eat("ident").value
+        args = []
+        if mnem not in ("ret", "syscall"):
+            args.append(self.parse_operand())
+            while self.at(","):
+                self.eat(",")
+                args.append(self.parse_operand())
+        self.eat(";")
+        return {"op": "insn", "mnem": mnem, "args": args, "line": line}
+
+    def parse_operand(self):
+        if self.at("num"):
+            return {"kind": "imm", "value": int(self.eat("num").value, 10)}
+        name = self.eat("ident").value
+        if len(name) >= 2 and name[0] == "r" and name[1:].isdigit():
+            idx = int(name[1:])
+            if idx <= 7:
+                return {"kind": "reg", "value": idx}
+        raise CompileError(f"machine operand must be r0-r7 or an integer, got {name}")
+
+    def parse_if(self):
+        line = self.eat("kw", "if").line
+        cond = self.parse_expr()
+        body = self.parse_block()
+        els = None
+        if self.at("kw", "else"):
+            self.eat("kw", "else")
+            if self.at("kw", "if"):
+                els = [self.parse_if()]
+            else:
+                els = self.parse_block()
+        return {"op": "if", "cond": cond, "body": body, "else": els, "line": line}
+
+    def parse_expr(self):
+        return self.parse_bin(("==", "!=", "<", ">", "<=", ">="), self.parse_add)
+
+    def parse_add(self):
+        return self.parse_bin(("+", "-"), self.parse_mul)
+
+    def parse_mul(self):
+        return self.parse_bin(("*", "/"), self.parse_unary)
+
+    def parse_bin(self, ops, lower):
+        left = lower()
+        while self.cur().kind in ops:
+            op = self.eat(self.cur().kind).value
+            right = lower()
+            left = {"op": "bin", "bin": op, "left": left, "right": right}
+        return left
+
+    def parse_unary(self):
+        if self.cur().kind in ("&", "!", "-"):
+            op = self.eat(self.cur().kind).value
+            return {"op": "unary", "unary": op, "expr": self.parse_unary()}
+        return self.parse_postfix()
+
+    def parse_postfix(self):
+        expr = self.parse_primary()
+        while True:
+            if self.at("("):
+                self.eat("(")
+                args = []
+                if not self.at(")"):
+                    args.append(self.parse_expr())
+                    while self.at(","):
+                        self.eat(",")
+                        args.append(self.parse_expr())
+                self.eat(")")
+                expr = {"op": "call", "fn": expr, "args": args}
+            elif self.at("."):
+                self.eat(".")
+                field = self.eat("ident").value
+                if field not in ("len", "ptr"):
+                    raise CompileError(f"unknown field {field}")
+                expr = {"op": "field", "expr": expr, "field": field}
+            else:
+                break
+        return expr
+
+    def parse_primary(self):
+        t = self.cur()
+        if t.kind == "num":
+            self.i += 1
+            return {"op": "num", "value": t.value}
+        if t.kind == "str":
+            self.i += 1
+            return {"op": "str", "value": t.value}
+        if t.kind == "ident":
+            self.i += 1
+            return {"op": "ident", "value": t.value}
+        if t.kind == "(":
+            self.eat("(")
+            expr = self.parse_expr()
+            self.eat(")")
+            return expr
+        raise CompileError(f"{t.line}: expected expression, got {t.kind} {t.value}")
+
+
+def ctype(typ):
+    base = BASE_TYPES[typ["name"]]
+    if typ["stars"]:
+        return base + " " + "* " * typ["stars"]
+    return base
+
+
+def c_string(text):
+    out = ['"']
+    for ch in text:
+        o = ord(ch)
+        if ch == "\\":
+            out.append("\\\\")
+        elif ch == '"':
+            out.append('\\"')
+        elif ch == "\n":
+            out.append("\\n")
+        elif ch == "\r":
+            out.append("\\r")
+        elif ch == "\t":
+            out.append("\\t")
+        elif 32 <= o < 127:
+            out.append(ch)
+        else:
+            out.append("\\x%02x" % o)
+    out.append('"')
+    return "".join(out)
+
+
+def gen_expr(expr, env, functions):
+    op = expr["op"]
+    if op == "num":
+        return expr["value"]
+    if op == "str":
+        raw = expr["value"]
+        return "(Slice){.ptr=(uint8_t*)%s, .len=%d}" % (c_string(raw), len(raw.encode("utf-8")))
+    if op == "ident":
+        name = expr["value"]
+        if name in env or name in functions or name in RUNTIME:
+            return name
+        raise CompileError(f"unknown name {name}")
+    if op == "unary":
+        return "(%s%s)" % (expr["unary"], gen_expr(expr["expr"], env, functions))
+    if op == "bin":
+        return "(%s %s %s)" % (
+            gen_expr(expr["left"], env, functions),
+            expr["bin"],
+            gen_expr(expr["right"], env, functions),
+        )
+    if op == "field":
+        return "(%s).%s" % (gen_expr(expr["expr"], env, functions), expr["field"])
+    if op == "call":
+        if expr["fn"]["op"] != "ident":
+            raise CompileError("call target must be a function name")
+        fname = expr["fn"]["value"]
+        if fname not in functions and fname not in RUNTIME:
+            raise CompileError(f"unknown function {fname}")
+        args = ", ".join(gen_expr(a, env, functions) for a in expr["args"])
+        return "%s(%s)" % (fname, args)
+    raise CompileError("bad expr")
+
+
+def gen_block(stmts, env, functions, indent):
+    lines = []
+    pad = "    " * indent
+    for stmt in stmts:
+        op = stmt["op"]
+        if op == "let":
+            if stmt["name"] in env:
+                raise CompileError(f"{stmt['line']}: duplicate {stmt['name']}")
+            env[stmt["name"]] = stmt["type"]
+            lines.append(
+                "%s%s %s = %s;"
+                % (pad, ctype(stmt["type"]), stmt["name"], gen_expr(stmt["expr"], env, functions))
+            )
+        elif op == "insn":
+            raise CompileError(
+                "%s: raw instruction `%s` is compiled by `cforge machine`, not the C runtime path"
+                % (stmt["line"], stmt["mnem"])
+            )
+        elif op == "return":
+            lines.append("%sreturn %s;" % (pad, gen_expr(stmt["expr"], env, functions)))
+        elif op == "expr":
+            lines.append("%s%s;" % (pad, gen_expr(stmt["expr"], env, functions)))
+        elif op == "while":
+            lines.append("%swhile (%s) {" % (pad, gen_expr(stmt["cond"], env, functions)))
+            lines.extend(gen_block(stmt["body"], env, functions, indent + 1))
+            lines.append("%s}" % pad)
+        elif op == "if":
+            lines.append("%sif (%s) {" % (pad, gen_expr(stmt["cond"], env, functions)))
+            lines.extend(gen_block(stmt["body"], env, functions, indent + 1))
+            lines.append("%s}" % pad)
+            if isinstance(stmt["else"], list) and stmt["else"] and stmt["else"][0]["op"] == "if":
+                # else if: attach by rewriting the next if with an else prefix
+                nxt = stmt["else"][0]
+                lines[-1] = "%s} else if (%s) {" % (pad, gen_expr(nxt["cond"], env, functions))
+                lines.extend(gen_block(nxt["body"], env, functions, indent + 1))
+                lines.append("%s}" % pad)
+                if nxt["else"] is not None:
+                    lines[-1] = "%s} else {" % pad
+                    if isinstance(nxt["else"], list) and nxt["else"] and nxt["else"][0].get("op") == "if":
+                        raise CompileError("else-if chain too deep for this compiler")
+                    lines.extend(gen_block(nxt["else"], env, functions, indent + 1))
+                    lines.append("%s}" % pad)
+            elif stmt["else"] is not None:
+                lines[-1] = "%s} else {" % pad
+                lines.extend(gen_block(stmt["else"], env, functions, indent + 1))
+                lines.append("%s}" % pad)
+        else:
+            raise CompileError("bad stmt")
+    return lines
+
+
+def emit(fns):
+    names = {fn["name"] for fn in fns}
+    lines = [
+        '#include "cforge_rt.h"',
+        "",
+    ]
+    for fn in fns:
+        cname = "cforge_main" if fn["name"] == "main" else fn["name"]
+        params = ", ".join("%s %s" % (ctype(p["type"]), p["name"]) for p in fn["params"]) or "void"
+        lines.append("static %s %s(%s);" % (ctype(fn["ret"]), cname, params))
+    lines.append("")
+    for fn in fns:
+        cname = "cforge_main" if fn["name"] == "main" else fn["name"]
+        params = ", ".join("%s %s" % (ctype(p["type"]), p["name"]) for p in fn["params"]) or "void"
+        lines.append("static %s %s(%s) {" % (ctype(fn["ret"]), cname, params))
+        env = {p["name"]: p["type"] for p in fn["params"]}
+        # Function names are visible as pointers inside the body.
+        lines.extend(gen_block(fn["body"], env, names, 1))
+        lines.append("}")
+        lines.append("")
+    lines.append("int main(void) { return cforge_main(); }")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def read_entry():
+    path = os.path.join(ROOT, "cforge.toml")
+    entry = "app/users.cforge"
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith("entry"):
+                entry = line.split("=", 1)[1].strip().strip('"')
+    return os.path.join(ROOT, entry)
+
+
+def compile_cforge(src_path, out_c):
+    with open(src_path, encoding="utf-8") as f:
+        src = f.read()
+    fns = Parser(lex(src)).parse()
+    os.makedirs(os.path.dirname(out_c), exist_ok=True)
+    with open(out_c, "w", encoding="utf-8") as f:
+        f.write(emit(fns))
+
+
+def cc_cmd(out_bin):
+    gen = os.path.join(ROOT, "build", "users.gen.c")
+    flags = subprocess.check_output(["pkg-config", "--cflags", "--libs", "sqlite3"], text=True).split()
+    return [
+        "cc",
+        "-std=c11",
+        "-O2",
+        "-g",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-D_GNU_SOURCE",
+        "-I",
+        os.path.join(ROOT, "runtime"),
+        "-o",
+        out_bin,
+        gen,
+        os.path.join(ROOT, "runtime", "server.c"),
+        os.path.join(ROOT, "runtime", "json.c"),
+        os.path.join(ROOT, "runtime", "db.c"),
+        "-lssl",
+        "-lcrypto",
+        "-pthread",
+        *flags,
+    ]
+
+
+def build():
+    out_c = os.path.join(ROOT, "build", "users.gen.c")
+    out_bin = os.path.join(ROOT, "build", "cforge-users")
+    compile_cforge(read_entry(), out_c)
+    subprocess.check_call(cc_cmd(out_bin))
+    return out_bin
+
+
+def http_req(port, method, path, body=None, headers=None):
+    data = None if body is None else body.encode()
+    req = urllib.request.Request("http://127.0.0.1:%d%s" % (port, path), data=data, method=method)
+    if headers:
+        for k, v in headers.items():
+            req.add_header(k, v)
+    try:
+        with urllib.request.urlopen(req, timeout=2) as resp:
+            return resp.status, resp.read().decode()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode()
+
+
+def wait_port(port, proc, timeout=3):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if proc.poll() is not None:
+            raise SystemExit("server exited early: %s" % proc.returncode)
+        try:
+            with socket.create_connection(("127.0.0.1", port), 0.2):
+                return
+        except OSError:
+            time.sleep(0.05)
+    raise SystemExit("server did not listen")
+
+
+def test():
+    bin_path = build()
+    port = 18081
+    tls_port = 18443
+    db = os.path.join(ROOT, "build", "test-users.db")
+    for suffix in ("", "-wal", "-shm"):
+        try:
+            os.remove(db + suffix)
+        except FileNotFoundError:
+            pass
+    cert = os.path.join(ROOT, "build", "cert.pem")
+    key = os.path.join(ROOT, "build", "key.pem")
+    subprocess.check_call(
+        [
+            "openssl",
+            "req",
+            "-x509",
+            "-newkey",
+            "ec",
+            "-pkeyopt",
+            "ec_paramgen_curve:prime256v1",
+            "-keyout",
+            key,
+            "-out",
+            cert,
+            "-days",
+            "2",
+            "-nodes",
+            "-subj",
+            "/CN=localhost",
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    env = os.environ.copy()
+    env.update(
+        {
+            "PORT": str(port),
+            "TLS_PORT": str(tls_port),
+            "CFORGE_DB": db,
+            "CFORGE_TLS_CERT": cert,
+            "CFORGE_TLS_KEY": key,
+            "CFORGE_BIND": "127.0.0.1",
+            "CFORGE_IDLE_MS": "60000",
+        }
+    )
+    log_path = os.path.join(ROOT, "build", "test-server.log")
+    log_file = open(log_path, "w", encoding="utf-8")
+    proc = subprocess.Popen([bin_path], env=env, stdout=log_file, stderr=subprocess.STDOUT)
+    failed = None
+    try:
+        wait_port(port, proc)
+        wait_port(tls_port, proc)
+        checks = []
+
+        def check(cond, label):
+            checks.append((cond, label))
+            if not cond:
+                raise AssertionError(label)
+
+        status, body = http_req(port, "GET", "/health")
+        check(status == 200 and body == "ok", "health %s %s" % (status, body))
+
+        status, body = http_req(port, "POST", "/users", "{}", {"Content-Type": "application/json"})
+        check(status == 400, "empty json %s" % status)
+
+        status, body = http_req(
+            port, "POST", "/users", '{"name":"","age":1}', {"Content-Type": "application/json"}
+        )
+        check(status == 400, "empty name %s" % status)
+
+        status, body = http_req(
+            port,
+            "POST",
+            "/users",
+            '{"age":36,"name":"ada \\"lovelace\\""}',
+            {"Content-Type": "application/json"},
+        )
+        check(status == 201 and '"id":' in body, "create %s %s" % (status, body))
+        user_id = body.split('"id":', 1)[1].split("}", 1)[0]
+
+        status, body = http_req(port, "GET", "/users/" + user_id)
+        check(status == 200 and "lovelace" in body and '"age":36' in body, "get %s %s" % (status, body))
+
+        status, body = http_req(port, "GET", "/users/999999")
+        check(status == 404, "missing %s" % status)
+
+        status, body = http_req(port, "DELETE", "/users/" + user_id)
+        check(status == 204, "delete %s" % status)
+
+        status, body = http_req(port, "GET", "/users/" + user_id)
+        check(status == 404, "deleted %s" % status)
+
+        status, body = http_req(port, "POST", "/health", "{}", {"Content-Type": "application/json"})
+        check(status == 405, "method %s" % status)
+
+        status, body = http_req(port, "GET", "/nope")
+        check(status == 404, "route %s" % status)
+
+        status, body = http_req(port, "GET", "/metrics")
+        check(status == 200 and "requests_total" in body, "metrics %s" % body)
+
+        # Split write: headers then the rest, on one TCP connection.
+        sock = socket.create_connection(("127.0.0.1", port), 2)
+        sock.sendall(b"GET /health HTTP/1.1\r\nHost: localhost\r\n")
+        time.sleep(0.05)
+        sock.sendall(b"Connection: close\r\n\r\n")
+        data = b""
+        sock.settimeout(2)
+        while b"\r\n\r\nok" not in data and len(data) < 4096:
+            chunk = sock.recv(1024)
+            if not chunk:
+                break
+            data += chunk
+        sock.close()
+        check(b"200 OK" in data and data.rstrip().endswith(b"ok"), "partial read")
+
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        raw = socket.create_connection(("127.0.0.1", tls_port), 2)
+        tls = ctx.wrap_socket(raw, server_hostname="localhost")
+        tls.sendall(b"GET /health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+        tls_data = b""
+        tls.settimeout(2)
+        while len(tls_data) < 64:
+            chunk = tls.recv(1024)
+            if not chunk:
+                break
+            tls_data += chunk
+        ver = tls.version()
+        tls.close()
+        check(ver == "TLSv1.3" and b"200 OK" in tls_data, "tls %s %s" % (ver, tls_data[:80]))
+
+        # Keep-alive: two requests, one connection.
+        sock = socket.create_connection(("127.0.0.1", port), 2)
+        sock.sendall(
+            b"GET /health HTTP/1.1\r\nHost: localhost\r\n\r\n"
+            b"GET /health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+        )
+        sock.settimeout(2)
+        blob = b""
+        while sock.recv:
+            try:
+                chunk = sock.recv(4096)
+            except socket.timeout:
+                break
+            if not chunk:
+                break
+            blob += chunk
+            if blob.count(b"200 OK") >= 2 and blob.count(b"ok") >= 2:
+                break
+        sock.close()
+        check(blob.count(b"200 OK") >= 2, "keepalive %s" % blob[:200])
+
+        print("ok %d checks" % len(checks))
+        machine_test()
+    except Exception as exc:
+        failed = exc
+        log_file.flush()
+        try:
+            with open(log_path, encoding="utf-8", errors="replace") as logf:
+                print(logf.read(), file=sys.stderr)
+        except OSError:
+            pass
+        raise
+    finally:
+        if proc.poll() is None:
+            proc.send_signal(signal.SIGTERM)
+            try:
+                proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=2)
+        else:
+            proc.wait(timeout=2)
+        log_file.close()
+        if failed is None and proc.returncode not in (0, -signal.SIGTERM, -15):
+            raise SystemExit("shutdown status %s" % proc.returncode)
+
+
+def deploy():
+    bin_path = build()
+    data = os.path.join(ROOT, "data")
+    os.makedirs(data, exist_ok=True)
+    cert = os.path.join(ROOT, "deploy", "cert.pem")
+    key = os.path.join(ROOT, "deploy", "key.pem")
+    os.makedirs(os.path.dirname(cert), exist_ok=True)
+    if not os.path.exists(cert) or not os.path.exists(key):
+        subprocess.check_call(
+            [
+                "openssl",
+                "req",
+                "-x509",
+                "-newkey",
+                "ec",
+                "-pkeyopt",
+                "ec_paramgen_curve:prime256v1",
+                "-keyout",
+                key,
+                "-out",
+                cert,
+                "-days",
+                "365",
+                "-nodes",
+                "-subj",
+                "/CN=localhost",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    unit_dir = os.path.expanduser("~/.config/systemd/user")
+    os.makedirs(unit_dir, exist_ok=True)
+    unit_path = os.path.join(unit_dir, "cforge-users.service")
+    db = os.path.join(data, "users.db")
+    unit = textwrap.dedent(
+        f"""\
+        [Unit]
+        Description=CForge users service
+
+        [Service]
+        ExecStart={bin_path}
+        WorkingDirectory={ROOT}
+        Environment=PORT=8080
+        Environment=TLS_PORT=8443
+        Environment=CFORGE_BIND=127.0.0.1
+        Environment=CFORGE_DB={db}
+        Environment=CFORGE_TLS_CERT={cert}
+        Environment=CFORGE_TLS_KEY={key}
+        Restart=on-failure
+        RestartSec=1
+
+        [Install]
+        WantedBy=default.target
+        """
+    )
+    with open(unit_path, "w", encoding="utf-8") as f:
+        f.write(unit)
+    systemctl = shutil.which("systemctl")
+    if not systemctl:
+        raise SystemExit("systemctl not found")
+    subprocess.check_call([systemctl, "--user", "daemon-reload"])
+    subprocess.check_call([systemctl, "--user", "enable", "--now", "cforge-users.service"])
+    deadline = time.time() + 5
+    last = ""
+    while time.time() < deadline:
+        try:
+            status, body = http_req(8080, "GET", "/health")
+            if status == 200 and body == "ok":
+                print("deployed http://127.0.0.1:8080")
+                print("deployed https://127.0.0.1:8443")
+                print("unit cforge-users.service")
+                return
+            last = "%s %s" % (status, body)
+        except Exception as exc:
+            last = str(exc)
+        time.sleep(0.1)
+    raise SystemExit("deploy health failed: %s" % last)
+
+
+def status():
+    try:
+        code, body = http_req(8080, "GET", "/health")
+    except Exception as exc:
+        raise SystemExit("down: %s" % exc)
+    print("%s %s" % (code, body))
+    code, body = http_req(8080, "GET", "/metrics")
+    print(body)
+
+
+def machine(argv):
+    from cforge_mach import compile_machine
+
+    if len(argv) < 3:
+        raise SystemExit("usage: cforge machine <file.cforge> [-o out]")
+    src = argv[2]
+    out = os.path.join(ROOT, "build", "cforge-mach")
+    if "-o" in argv:
+        out = argv[argv.index("-o") + 1]
+    path, listing = compile_machine(src, out)
+    print(path)
+    for line in listing:
+        print(line)
+    return path
+
+
+def machine_test():
+    from cforge_mach import compile_machine
+
+    cases = [
+        ("mach/add.cforge", 5),
+        ("mach/expr.cforge", 42),
+    ]
+    for rel, expect in cases:
+        src = os.path.join(ROOT, rel)
+        out = os.path.join(ROOT, "build", os.path.splitext(os.path.basename(rel))[0])
+        compile_machine(src, out)
+        proc = subprocess.run([out], check=False)
+        if proc.returncode != expect:
+            raise SystemExit("%s exited %s, expected %s" % (rel, proc.returncode, expect))
+        print("ok %s -> %s" % (rel, expect))
+
+
+def main(argv):
+    cmd = argv[1] if len(argv) > 1 else "help"
+    if cmd == "build":
+        print(build())
+    elif cmd == "run":
+        bin_path = build()
+        os.execv(bin_path, [bin_path])
+    elif cmd == "test":
+        test()
+    elif cmd == "deploy":
+        deploy()
+    elif cmd == "status":
+        status()
+    elif cmd == "machine":
+        machine(argv)
+    elif cmd == "machine-test":
+        machine_test()
+    else:
+        print("usage: cforge build | run | test | deploy | status | machine | machine-test")
+        if cmd != "help":
+            return 2
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv))
+    except CompileError as exc:
+        print("compile error: %s" % exc, file=sys.stderr)
+        sys.exit(1)
+    except subprocess.CalledProcessError as exc:
+        print("command failed: %s" % exc, file=sys.stderr)
+        sys.exit(exc.returncode or 1)
