@@ -12,3 +12,9 @@ __pycache__/
 
 # editor
 /.cursor/
+
+# docs-site (Next.js)
+/docs-site/node_modules/
+/docs-site/.next/
+/docs-site/out/
+/docs-site/content/docs/

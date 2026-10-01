@@ -15,16 +15,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build documentation HTML
-        run: python3 docs/build_docs.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: docs-site/package-lock.json
+
+      - name: Build documentation (Next.js / Fumadocs)
+        working-directory: docs-site
+        run: npm ci && npm run build
 
       - name: Prepare publish directory
         run: |
           rm -rf _site
           mkdir -p _site
           cp docs/.nojekyll _site/
-          cp docs/index.html docs/status.html docs/404.html _site/
-          cp -r docs/assets docs/learn docs/reference docs/spec _site/
+          cp -r docs-site/out/* _site/
 
       - name: Update repository About (description + homepage)
         continue-on-error: true
