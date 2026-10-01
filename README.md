@@ -28,7 +28,7 @@ PORT=8080 CFORGE_DB=data/users.db ./cforge run
 ./cforge deploy-docker     # Compose: Postgres + Redis + app (needs Docker)
 ```
 
-Set `CFORGE_BIND=127.0.0.1` by default. Optional `CFORGE_PG_DSN`, `CFORGE_REDIS_URL`. TLS uses self-signed certs under `deploy/` (created on deploy).
+Set `CFORGE_BIND=127.0.0.1` by default. **`./cforge deploy`** starts bundled Redis (`cforge-redis.service`) and sets `CFORGE_REDIS_URL` when needed. Optional `CFORGE_PG_DSN`. TLS uses self-signed certs under `deploy/` (created on deploy).
 
 ## Users API
 

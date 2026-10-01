@@ -1,6 +1,6 @@
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc pkg-config libsqlite3-dev libssl-dev libpq-dev openssl ca-certificates \
+    gcc pkg-config libsqlite3-dev libssl-dev libpq-dev openssl ca-certificates python3 \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY . /src

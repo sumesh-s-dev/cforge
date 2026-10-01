@@ -6,8 +6,13 @@ __pycache__/
 # local runtime data
 /data/*.db
 /data/*.db-*
+/data/redis/
 
-# TLS keys (generate with ./cforge deploy or openssl)
+# bundled redis build tree
+/build/redis-*.tar.gz
+/build/redis-7.*/
+/build/redis.tgz
+/build/redis-server-bin (generate with ./cforge deploy or openssl)
 /deploy/*.pem
 
 # editor

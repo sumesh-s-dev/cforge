@@ -605,6 +605,64 @@ def wait_port(port, proc, timeout=3):
     raise SystemExit("server did not listen")
 
 
+def redis_reachable(host="127.0.0.1", port=6379, timeout=0.5):
+    try:
+        with socket.create_connection((host, port), timeout) as sock:
+            sock.sendall(b"PING\r\n")
+            data = sock.recv(16)
+            return data.startswith(b"+PONG")
+    except OSError:
+        return False
+
+
+def bundled_redis_bin():
+    return os.path.join(ROOT, "build", "redis-server-bin")
+
+
+def ensure_redis_service(systemctl):
+    url = os.environ.get("CFORGE_REDIS_URL", "").strip()
+    if url:
+        return url
+    if redis_reachable():
+        return "redis://127.0.0.1:6379"
+    exe = bundled_redis_bin()
+    if not os.path.isfile(exe):
+        script = os.path.join(ROOT, "scripts", "build-redis.sh")
+        if os.path.isfile(script):
+            subprocess.check_call(["bash", script], cwd=ROOT)
+        exe = bundled_redis_bin()
+    if not os.path.isfile(exe):
+        return None
+    data_dir = os.path.join(ROOT, "data", "redis")
+    os.makedirs(data_dir, exist_ok=True)
+    unit_dir = os.path.expanduser("~/.config/systemd/user")
+    os.makedirs(unit_dir, exist_ok=True)
+    redis_unit = os.path.join(unit_dir, "cforge-redis.service")
+    redis_unit_body = textwrap.dedent(
+        f"""\
+        [Unit]
+        Description=CForge bundled Redis (127.0.0.1:6379)
+
+        [Service]
+        ExecStart={exe} --bind 127.0.0.1 --port 6379 --dir {data_dir} --save ""
+        Restart=on-failure
+        RestartSec=1
+
+        [Install]
+        WantedBy=default.target
+        """
+    )
+    with open(redis_unit, "w", encoding="utf-8") as f:
+        f.write(redis_unit_body)
+    subprocess.check_call([systemctl, "--user", "daemon-reload"])
+    subprocess.check_call([systemctl, "--user", "enable", "--now", "cforge-redis.service"])
+    for _ in range(30):
+        if redis_reachable():
+            return "redis://127.0.0.1:6379"
+        time.sleep(0.1)
+    return None
+
+
 def test():
     bin_path = build()
     port = 18081
@@ -862,6 +920,13 @@ def deploy():
     os.makedirs(unit_dir, exist_ok=True)
     unit_path = os.path.join(unit_dir, "cforge-users.service")
     db = os.path.join(data, "users.db")
+    redis_env = ""
+    systemctl = shutil.which("systemctl")
+    if not systemctl:
+        raise SystemExit("systemctl not found")
+    redis_url = ensure_redis_service(systemctl)
+    if redis_url:
+        redis_env = "Environment=CFORGE_REDIS_URL=%s\n        " % redis_url
     unit = textwrap.dedent(
         f"""\
         [Unit]
@@ -874,7 +939,7 @@ def deploy():
         Environment=TLS_PORT=8443
         Environment=CFORGE_BIND=127.0.0.1
         Environment=CFORGE_DB={db}
-        Environment=CFORGE_TLS_CERT={cert}
+        {redis_env}Environment=CFORGE_TLS_CERT={cert}
         Environment=CFORGE_TLS_KEY={key}
         Restart=on-failure
         RestartSec=1
@@ -885,9 +950,6 @@ def deploy():
     )
     with open(unit_path, "w", encoding="utf-8") as f:
         f.write(unit)
-    systemctl = shutil.which("systemctl")
-    if not systemctl:
-        raise SystemExit("systemctl not found")
     subprocess.check_call([systemctl, "--user", "daemon-reload"])
     subprocess.check_call([systemctl, "--user", "enable", "--now", "cforge-users.service"])
     subprocess.check_call([systemctl, "--user", "restart", "cforge-users.service"])
@@ -900,6 +962,8 @@ def deploy():
                 print("deployed http://127.0.0.1:8080")
                 print("deployed https://127.0.0.1:8443")
                 print("unit cforge-users.service")
+                if redis_url:
+                    print("redis %s (cforge-redis.service)" % redis_url)
                 return
             last = "%s %s" % (status, body)
         except Exception as exc:
@@ -957,11 +1021,12 @@ def everything():
     smoke_api(8080)
     print("== docs ==")
     docs_build()
-    if shutil.which("docker"):
+    _docker, _env = docker_cmd()
+    if _docker:
         print("== deploy-docker ==")
         deploy_docker()
     else:
-        print("skip deploy-docker (install docker for postgres+redis stack)")
+        print("skip deploy-docker (run scripts/setup-docker-rootless.sh once)")
     print("everything ok: check, lock, test, deploy, smoke, docs, docker-if-present")
 
 
@@ -972,11 +1037,39 @@ def e2e():
     print("e2e ok: test + systemd deploy + API smoke on :8080")
 
 
+def docker_cmd():
+    path = os.environ.get("PATH", "")
+    home_bin = os.path.join(os.path.expanduser("~"), "bin")
+    if home_bin not in path.split(os.pathsep):
+        path = home_bin + os.pathsep + path
+    env = os.environ.copy()
+    env["PATH"] = path
+    if not env.get("DOCKER_HOST"):
+        uid = os.getuid()
+        sock = "/run/user/%d/docker.sock" % uid
+        if os.path.exists(sock):
+            env["DOCKER_HOST"] = "unix://" + sock
+    plugins = os.path.join(os.path.expanduser("~"), ".docker", "cli-plugins")
+    if os.path.isdir(plugins) and "DOCKER_CONFIG" not in env:
+        env["DOCKER_CONFIG"] = os.path.join(os.path.expanduser("~"), ".docker")
+    exe = shutil.which("docker", path=env["PATH"])
+    if not exe:
+        return None, env
+    return exe, env
+
+
 def deploy_docker():
     compose = os.path.join(ROOT, "deploy", "docker-compose.yml")
-    if not shutil.which("docker"):
-        raise SystemExit("docker not found; use ./cforge e2e for local systemd deploy")
-    subprocess.check_call(["docker", "compose", "-f", compose, "up", "--build", "-d"], cwd=ROOT)
+    docker, env = docker_cmd()
+    if not docker:
+        script = os.path.join(ROOT, "scripts", "setup-docker-rootless.sh")
+        raise SystemExit(
+            "docker not found; run: bash %s\n(or ./cforge e2e for systemd deploy)" % script
+        )
+    systemctl = shutil.which("systemctl")
+    if systemctl:
+        subprocess.call([systemctl, "--user", "stop", "cforge-users.service"])
+    subprocess.check_call([docker, "compose", "-f", compose, "up", "--build", "-d"], cwd=ROOT, env=env)
     deadline = time.time() + 120
     last = ""
     while time.time() < deadline:
