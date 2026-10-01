@@ -22,24 +22,7 @@ import urllib.request
 ROOT = os.path.dirname(os.path.abspath(__file__))
 
 KEYWORDS = {"fn", "let", "if", "else", "while", "return", "struct", "extern"}
-RUNTIME = {
-    "slice_empty",
-    "ctx_param_u64",
-    "ctx_status",
-    "ctx_text",
-    "ctx_problem",
-    "ctx_json_user",
-    "ctx_json_id",
-    "ctx_metrics",
-    "json_parse_create",
-    "db_get_user",
-    "db_insert_user",
-    "db_delete_user",
-    "app_get",
-    "app_post",
-    "app_delete",
-    "app_listen",
-}
+RUNTIME = set()
 BASE_TYPES = {
     "i32": "int32_t",
     "u32": "uint32_t",
@@ -50,6 +33,7 @@ BASE_TYPES = {
     "bool": "int32_t",
     "Slice": "Slice",
     "Ctx": "Ctx",
+    "void": "void",
 }
 STRUCT_TYPES = set()
 EXTERN_FNS = set()
@@ -400,6 +384,8 @@ class Parser:
 
 
 def ctype(typ):
+    if typ["name"] == "void":
+        return "void"
     base = BASE_TYPES.get(typ["name"], typ["name"])
     if typ["stars"]:
         return base + " " + "* " * typ["stars"]
@@ -437,7 +423,7 @@ def gen_expr(expr, env, functions):
         return "(Slice){.ptr=(uint8_t*)%s, .len=%d}" % (c_string(raw), len(raw.encode("utf-8")))
     if op == "ident":
         name = expr["value"]
-        if name in env or name in functions or name in RUNTIME:
+        if name in env or name in functions or name in EXTERN_FNS:
             return name
         raise CompileError(f"unknown name {name}")
     if op == "unary":
@@ -454,7 +440,7 @@ def gen_expr(expr, env, functions):
         if expr["fn"]["op"] != "ident":
             raise CompileError("call target must be a function name")
         fname = expr["fn"]["value"]
-        if fname not in functions and fname not in RUNTIME and fname not in EXTERN_FNS:
+        if fname not in functions and fname not in EXTERN_FNS:
             raise CompileError(f"unknown function {fname}")
         args = ", ".join(gen_expr(a, env, functions) for a in expr["args"])
         return "%s(%s)" % (fname, args)
@@ -569,6 +555,121 @@ def emit(parsed):
     return "\n".join(lines)
 
 
+ROUTE_FNS = {"app_get", "app_post", "app_delete"}
+
+
+def typ_eq(a, b):
+    return a["name"] == b["name"] and a["stars"] == b["stars"]
+
+
+def is_handler_fn(sig):
+    if sig.get("extern") or sig["ret"]["name"] != "i32":
+        return False
+    if len(sig["params"]) != 1:
+        return False
+    p = sig["params"][0]["type"]
+    return p["name"] == "Ctx" and p["stars"] == 1
+
+
+def typecheck(parsed):
+    sigs = {fn["name"]: fn for fn in parsed["fns"]}
+    for fn in parsed["fns"]:
+        if fn.get("extern"):
+            continue
+        env = {p["name"]: p["type"] for p in fn["params"]}
+        tc_stmts(fn["body"], env, sigs, fn["ret"], fn["name"])
+
+
+def tc_stmts(stmts, env, sigs, ret_type, owner):
+    for stmt in stmts:
+        op = stmt["op"]
+        if op == "let":
+            tc_expr(stmt["expr"], env, sigs)
+            env[stmt["name"]] = stmt["type"]
+        elif op == "assign":
+            if stmt["name"] not in env:
+                raise CompileError(f"{stmt['line']}: unknown {stmt['name']}")
+            tc_expr(stmt["expr"], env, sigs)
+        elif op == "return":
+            tc_expr(stmt["expr"], env, sigs)
+        elif op == "expr":
+            tc_expr(stmt["expr"], env, sigs)
+        elif op == "while":
+            tc_expr(stmt["cond"], env, sigs)
+            tc_stmts(stmt["body"], dict(env), sigs, ret_type, owner)
+        elif op == "if":
+            tc_expr(stmt["cond"], env, sigs)
+            tc_stmts(stmt["body"], dict(env), sigs, ret_type, owner)
+            els = stmt["else"]
+            if els is not None:
+                if isinstance(els, list) and els and els[0]["op"] == "if":
+                    tc_stmts(els, env, sigs, ret_type, owner)
+                else:
+                    tc_stmts(els, dict(env), sigs, ret_type, owner)
+
+
+def tc_expr(expr, env, sigs):
+    op = expr["op"]
+    if op in ("num", "str"):
+        return
+    if op == "ident":
+        name = expr["value"]
+        if name not in env and name not in sigs and name not in EXTERN_FNS:
+            raise CompileError(f"unknown name {name}")
+        return
+    if op == "unary":
+        tc_expr(expr["expr"], env, sigs)
+        return
+    if op == "bin":
+        tc_expr(expr["left"], env, sigs)
+        tc_expr(expr["right"], env, sigs)
+        return
+    if op == "field":
+        tc_expr(expr["expr"], env, sigs)
+        return
+    if op == "call":
+        if expr["fn"]["op"] != "ident":
+            raise CompileError("call target must be a function name")
+        fname = expr["fn"]["value"]
+        if fname not in sigs and fname not in EXTERN_FNS:
+            raise CompileError(f"unknown function {fname}")
+        sig = sigs.get(fname)
+        args = expr["args"]
+        if fname in ROUTE_FNS:
+            if len(args) != 2:
+                raise CompileError(f"app route registration needs 2 arguments")
+            if args[1]["op"] != "ident":
+                raise CompileError(f"{fname} handler must be a function name")
+            h = args[1]["value"]
+            if h not in sigs or not is_handler_fn(sigs[h]):
+                raise CompileError(f"{fname} handler {h} must be fn(*Ctx) -> i32")
+            tc_expr(args[0], env, sigs)
+            return
+        if sig and not sig.get("extern"):
+            if len(args) != len(sig["params"]):
+                raise CompileError(f"{fname} expected {len(sig['params'])} args, got {len(args)}")
+        elif sig and sig.get("extern"):
+            if len(args) != len(sig["params"]):
+                raise CompileError(f"{fname} expected {len(sig['params'])} args, got {len(args)}")
+        for a in args:
+            tc_expr(a, env, sigs)
+        return
+    raise CompileError("bad expr")
+
+
+def load_program_src():
+    runtime = os.path.join(ROOT, "app", "runtime.cforge")
+    entry = read_entry()
+    chunks = []
+    for path in (runtime, entry):
+        if os.path.isfile(path):
+            with open(path, encoding="utf-8") as f:
+                chunks.append(f.read())
+    if not chunks:
+        raise CompileError("no source files")
+    return "\n\n".join(chunks)
+
+
 def read_entry():
     path = os.path.join(ROOT, "cforge.toml")
     entry = "app/users.cforge"
@@ -581,22 +682,27 @@ def read_entry():
 
 
 def compile_cforge_src(src, out_c):
-    global STRUCT_TYPES
+    global STRUCT_TYPES, EXTERN_FNS
     STRUCT_TYPES = set()
     parsed = Parser(lex(src)).parse()
+    EXTERN_FNS = {fn["name"] for fn in parsed["fns"] if fn.get("extern")}
     for attr_line, attr_name in ATTR_WARNINGS:
         print(
             "warning: %s: @%s ignored (no checking yet)" % (attr_line, attr_name),
             file=sys.stderr,
         )
+    typecheck(parsed)
     os.makedirs(os.path.dirname(out_c), exist_ok=True)
     with open(out_c, "w", encoding="utf-8") as f:
         f.write(emit(parsed))
 
 
 def compile_cforge(src_path, out_c):
-    with open(src_path, encoding="utf-8") as f:
-        compile_cforge_src(f.read(), out_c)
+    if src_path:
+        with open(src_path, encoding="utf-8") as f:
+            compile_cforge_src(f.read(), out_c)
+    else:
+        compile_cforge_src(load_program_src(), out_c)
 
 
 def compiler_test():
@@ -626,7 +732,37 @@ fn main() -> i32 {
         raise SystemExit("compiler_test: expected duplicate let error")
     except CompileError:
         pass
+    arity_bad = """
+extern fn foo(x: u32) -> i32;
+fn main() -> i32 { return foo(); }
+"""
+    try:
+        compile_cforge_src(arity_bad, out)
+        raise SystemExit("compiler_test: expected arity error")
+    except CompileError:
+        pass
     print("ok compiler-test")
+
+
+def fuzz_http(port, proc, rounds=80):
+    import random
+
+    for _ in range(rounds):
+        if proc.poll() is not None:
+            raise SystemExit("fuzz: server exited %s" % proc.returncode)
+        sock = socket.create_connection(("127.0.0.1", port), 1)
+        sock.settimeout(0.5)
+        blob = os.urandom(random.randint(1, 512))
+        try:
+            sock.sendall(blob)
+            sock.recv(4096)
+        except (socket.timeout, ConnectionResetError, BrokenPipeError, OSError):
+            pass
+        finally:
+            sock.close()
+    if proc.poll() is not None:
+        raise SystemExit("fuzz: server crashed")
+    print("ok fuzz-http %d rounds" % rounds)
 
 
 def cc_cmd(out_bin):
@@ -667,7 +803,7 @@ def cc_cmd(out_bin):
 def check_only():
     compiler_test()
     out_c = os.path.join(ROOT, "build", "users.gen.c")
-    compile_cforge(read_entry(), out_c)
+    compile_cforge(None, out_c)
     print("ok %s" % out_c)
     return out_c
 
@@ -675,7 +811,7 @@ def check_only():
 def build():
     out_c = os.path.join(ROOT, "build", "users.gen.c")
     out_bin = os.path.join(ROOT, "build", "cforge-users")
-    compile_cforge(read_entry(), out_c)
+    compile_cforge(None, out_c)
     subprocess.check_call(cc_cmd(out_bin))
     return out_bin
 
@@ -962,6 +1098,7 @@ def test():
         sock.close()
         check(blob.count(b"200 OK") >= 2, "keepalive %s" % blob[:200])
 
+        fuzz_http(port, proc)
         print("ok %d checks" % len(checks))
         machine_test()
     except Exception as exc:
@@ -1236,7 +1373,7 @@ def machine_test():
 
 
 def package_lock():
-    paths = ["cforge", "cforge_mach.py", "cforge.toml", "app/users.cforge"]
+    paths = ["cforge", "cforge_mach.py", "cforge.toml", "app/runtime.cforge", "app/users.cforge"]
     for name in sorted(os.listdir(os.path.join(ROOT, "runtime"))):
         if name.endswith((".c", ".h")):
             paths.append("runtime/" + name)

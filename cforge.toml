@@ -1,6 +1,7 @@
 [package]
 name = "users"
 entry = "app/users.cforge"
+runtime = "app/runtime.cforge"
 
 [profile.server]
 opt = "speed"

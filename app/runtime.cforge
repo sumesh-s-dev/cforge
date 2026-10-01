@@ -1,0 +1,17 @@
+// Runtime API (implemented in C). Declarations only — no bodies.
+extern fn slice_empty() -> Slice;
+extern fn ctx_param_u64(ctx: *Ctx, index: i32, out: *u64) -> i32;
+extern fn ctx_status(ctx: *Ctx, status: i32) -> i32;
+extern fn ctx_text(ctx: *Ctx, status: i32, body: Slice) -> i32;
+extern fn ctx_json_user(ctx: *Ctx, status: i32, id: u64, name: Slice, age: u32) -> i32;
+extern fn ctx_json_id(ctx: *Ctx, status: i32, id: u64) -> i32;
+extern fn ctx_problem(ctx: *Ctx, status: i32, title: Slice, detail: Slice) -> i32;
+extern fn ctx_metrics(ctx: *Ctx) -> i32;
+extern fn json_parse_create(ctx: *Ctx, name: *Slice, age: *u32) -> i32;
+extern fn db_get_user(ctx: *Ctx, id: u64, out_id: *u64, name: *Slice, age: *u32) -> i32;
+extern fn db_insert_user(ctx: *Ctx, name: Slice, age: u32, out_id: *u64) -> i32;
+extern fn db_delete_user(ctx: *Ctx, id: u64) -> i32;
+extern fn app_get(path: Slice, handler: i32) -> void;
+extern fn app_post(path: Slice, handler: i32) -> void;
+extern fn app_delete(path: Slice, handler: i32) -> void;
+extern fn app_listen(port: u16) -> i32;

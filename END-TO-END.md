@@ -42,7 +42,9 @@ The language does not know what HTTP, JSON, TLS, or SQL are. Those live in the C
 cforge
 ├── cforge                 toolchain: lex, parse, C codegen, cc, test, deploy
 ├── cforge.toml            package name and entry path
-├── app/users.cforge       the service source
+├── app/
+│   ├── runtime.cforge   extern declarations (C API)
+│   └── users.cforge     handlers + main
 ├── runtime
 │   ├── cforge_rt.h        public runtime API (what .cforge calls)
 │   ├── internal.h         Ctx, Arena, limits

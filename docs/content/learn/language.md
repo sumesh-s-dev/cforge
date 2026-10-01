@@ -72,11 +72,11 @@ The server backend (`./cforge build`) rejects raw instructions — use the [mach
 
 ## Extern (runtime symbols)
 
+Runtime functions live in **`app/runtime.cforge`** as `extern fn` declarations (implemented in C). Handlers in `app/users.cforge` call them without editing the compiler.
+
 ```forge
 extern fn db_get_user(ctx: *Ctx, id: u64, out_id: *u64, name: *Slice, age: *u32) -> i32;
 ```
-
-`extern fn` declares a C/runtime symbol callable from handlers without editing the compiler allowlist.
 
 ## Struct types
 
