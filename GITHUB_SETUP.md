@@ -1,6 +1,17 @@
 ## GitHub: fix 404 and empty About (2 minutes)
 
-The **pages** workflow publishes docs to the `gh-pages` branch. GitHub will **not** serve them until you turn Pages on once.
+The **pages** workflow publishes docs to the `gh-pages` branch. GitHub will **not** serve them at `*.github.io` until Pages is enabled once.
+
+**Docs work immediately (no Pages toggle):**  
+https://cdn.jsdelivr.net/gh/sumesh-s-dev/cforge@gh-pages/index.html
+
+Or run locally after `git push`:
+
+```bash
+chmod +x scripts/enable-github.sh && ./scripts/enable-github.sh
+```
+
+(`gh auth login` once if prompted.)
 
 ### Step 1 — Enable Pages
 

@@ -1,10 +1,10 @@
 # CForge
 
-Low-level systems language: **dual compilers** (C server + native ELF), epoll HTTP/TLS/SQLite service, [full backend specification](https://sumesh-s-dev.github.io/cforge/spec/index.html).
+Low-level systems language: **dual compilers** (C server + native ELF), epoll HTTP/TLS/SQLite service, [full backend specification](https://cdn.jsdelivr.net/gh/sumesh-s-dev/cforge@gh-pages/spec/index.html).
 
-> **Site 404?** Enable GitHub Pages once — see **[GITHUB_SETUP.md](./GITHUB_SETUP.md)** (2 min).
+> **Site 404 on github.io?** Run `./scripts/enable-github.sh` or follow **[GITHUB_SETUP.md](./GITHUB_SETUP.md)** (2 min). Docs mirror: [jsDelivr](https://cdn.jsdelivr.net/gh/sumesh-s-dev/cforge@gh-pages/index.html).
 
-**Documentation:** https://sumesh-s-dev.github.io/cforge/
+**Documentation:** https://sumesh-s-dev.github.io/cforge/ · [mirror](https://cdn.jsdelivr.net/gh/sumesh-s-dev/cforge@gh-pages/index.html)
 
 **Repository:** https://github.com/sumesh-s-dev/cforge
 
@@ -41,7 +41,7 @@ Set `CFORGE_BIND=127.0.0.1` by default. TLS uses self-signed certs under `deploy
 
 ## Documentation
 
-- **Book (web):** https://sumesh-s-dev.github.io/cforge/
+- **Book (web):** https://sumesh-s-dev.github.io/cforge/ ([CDN mirror](https://cdn.jsdelivr.net/gh/sumesh-s-dev/cforge@gh-pages/index.html))
 - **Service deep-dive:** [END-TO-END.md](./END-TO-END.md)
 - **Regenerate site:** `python3 docs/build_docs.py`
 
