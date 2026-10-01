@@ -11,6 +11,7 @@ All commands run from the repository root via `./cforge`.
 | `deploy` | Build, install systemd user unit, health check |
 | `status` | GET `/health` and `/metrics` on port 8080 |
 | `all` | `test` + `deploy` + `status` + git publish script |
+| `package` | Write `cforge.lock` source fingerprints |
 | `machine <file> [-o path]` | Native ELF backend |
 | `machine-test` | Verify mach/add and mach/expr exit codes |
 
