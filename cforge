@@ -855,11 +855,15 @@ def machine_test():
 
 
 def all_in_one():
+    print("== test ==")
     test()
+    print("== deploy ==")
     deploy()
+    print("== status ==")
     status()
     if subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True).stdout.strip():
         raise SystemExit("uncommitted changes; commit before publish")
+    print("== publish ==")
     subprocess.check_call([os.path.join(ROOT, "scripts", "publish-github.sh")])
 
 
