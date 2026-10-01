@@ -65,8 +65,18 @@ The server backend (`./cforge build`) rejects raw instructions — use the [mach
 
 ## Not in 0.1
 
-- `struct` declarations in `.cforge` (structs live in C runtime headers)
 - generics, modules, `async fn`, comptime derives
-- Operator overloading, enums, traits
+- operator overloading, enums, traits
+
+## Struct types (1.0)
+
+```forge
+struct CreateUser {
+    name: Slice;
+    age: u32;
+}
+```
+
+Structs lower to C `typedef struct` in generated code. Fields use types from the table above.
 
 Roadmap: [Implementation status](../status.html).

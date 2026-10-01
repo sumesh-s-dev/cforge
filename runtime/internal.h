@@ -47,4 +47,7 @@ uint64_t cforge_db_errors(void);
 
 int cforge_queue(Ctx *ctx, int status, const char *ctype, const void *body, size_t len, const char *extra);
 
+void cforge_log_set_level(int level);
+void cforge_logf(int level, const char *fmt, ...);
+
 #endif

@@ -2,7 +2,8 @@
 
 Low-level systems language prototype with **dual compilers** (C server backend + native x86-64 ELF), epoll HTTP service, and explicit memory.
 
-**Documentation:** https://sumesh-s-dev.github.io/cforge/
+**Documentation:** https://sumesh-s-dev.github.io/cforge/  
+**Full backend specification:** https://sumesh-s-dev.github.io/cforge/spec/index.html (see also [SPECIFICATION.md](./SPECIFICATION.md))
 
 **Repository:** https://github.com/sumesh-s-dev/cforge
 

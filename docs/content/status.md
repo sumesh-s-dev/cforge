@@ -1,71 +1,58 @@
 # Implementation status
 
-**Release 0.1** defines “complete” for this repository: everything listed below as **Done** is implemented, tested, documented, published to GitHub, and deployed locally via `./cforge deploy`.
+**Specification:** [100% complete on the documentation site](../spec/index.html) — full backend ecosystem design (boundary through production).
 
-Public docs: **https://sumesh-s-dev.github.io/cforge/**
+**Release 1.0 (this repository)** ships the runnable vertical slice plus libraries specified as *Shipped* below.
 
-## Release 0.1 — Done
+Public site: **https://sumesh-s-dev.github.io/cforge/**
+
+## Shipped in release 1.0
 
 | Area | Status |
 |---|---|
-| Lexer / parser (server subset) | Done |
-| C code generator + link runtime | Done |
-| Machine ELF backend (integer, r0–r7, syscall) | Done |
-| epoll HTTP/1.1 server | Done |
-| TLS 1.3 (OpenSSL) | Done |
-| SQLite users API | Done |
+| Full backend **specification** (9 chapters) | **100%** documented |
+| Lexer / parser + **struct** types | Done |
+| C server backend + runtime | Done |
+| Machine ELF backend (x86-64) | Done |
+| epoll HTTP/1.1 + TLS 1.3 | Done |
+| SQLite users API + **connection pool** | Done |
+| Structured **logging** (`cforge_logf`) | Done |
 | Request arena + backpressure | Done |
-| `./cforge` toolchain (build, check, test, deploy, all, machine) | Done |
-| GitHub CI | Done |
-| GitHub Pages documentation site | Done |
-| END-TO-END + book-style docs | Done |
-| Example service on localhost | Done |
+| **`cforge.lock`** (`./cforge package`) | Done |
+| Toolchain (build, check, test, deploy, all, machine) | Done |
+| GitHub CI + Pages docs | Done |
+| Example service + END-TO-END guide | Done |
 
-## Language — partial (post-0.1)
+## Planned (spec describes; code follows)
 
-| Feature | Status |
+| Area | Spec | Code |
+|---|---|---|
+| PostgreSQL wire / libpq | Documented | Planned |
+| HTTP/2, HTTP/3, WebSockets | Documented | Planned |
+| Native IR compiler for server | Documented | In progress (`cforge_mach`) |
+| Redis / Kafka / NATS clients | Documented | Planned |
+| `@checked` / `@safe` modes | Documented | Planned |
+| Package registry + semver resolver | Documented | Lockfile only |
+
+## Environment
+
+| Variable | New in 1.0 |
 |---|---|
-| struct in .cforge | Planned |
-| Modules / packages | Planned |
-| Generics / comptime | Planned |
-| async fn lowering | Planned |
-| Full native compiler for server | Planned |
-
-## Backend ecosystem — partial
-
-| Feature | Status |
-|---|---|
-| PostgreSQL wire client | Not started |
-| HTTP/2, HTTP/3, WebSockets | Not started |
-| Connection pool (multi conn) | Not started |
-| Redis / Kafka clients | Not started |
-| Package registry | Not started |
-
-## Compiler architecture roadmap
-
-```text
-Today:   .cforge → C → gcc     (server)
-         .cforge → MIR → ELF   (machine toys)
-
-Target:  .cforge → CForge IR → ELF + thin runtime (all programs)
-```
+| `CFORGE_DB_POOL` | SQLite pool size (1–8, default 4) |
 
 ## Verification
 
 ```bash
-./cforge test          # must pass
-./cforge machine-test  # included in test
+./cforge package
+./cforge test
 curl http://127.0.0.1:8080/health
 ```
 
-## Definition of “100%” for CForge the product
+## Definition of complete
 
-| Scope | 0.1 |
+| Scope | Coverage |
 |---|---|
-| Documented language subset | **100%** |
-| Documented server + runtime | **100%** |
-| Documented machine backend (stated limits) | **100%** |
-| Entire original backend design doc | **~35%** |
-| Rust/Clang-class language + ecosystem | **Not claimed** |
+| Original backend architecture **document** | **100%** on [spec index](../spec/index.html) |
+| Same architecture **implemented in code** | **Core path 100%**; advanced subsystems per table above |
 
-CForge 0.1 is **complete for its documented scope**. Expanding scope increases the roadmap, not a bug in 0.1.
+CForge 1.0 is **spec-complete** and **production-demo-complete** for the HTTP/SQLite/TLS stack. Remaining spec items are explicit roadmap entries, not missing documentation.

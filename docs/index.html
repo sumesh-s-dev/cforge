@@ -20,6 +20,17 @@
 <li><a href="learn/runtime.html">Runtime &amp; HTTP</a></li>
 <li><a href="learn/machine.html">Machine backend</a></li>
 </ul></section>
+<section><h2>Specification</h2><ul>
+<li><a href="spec/index.html">Backend ecosystem</a></li>
+<li><a href="spec/boundary.html">Language boundary</a></li>
+<li><a href="spec/networking.html">Networking</a></li>
+<li><a href="spec/http-async.html">HTTP &amp; async</a></li>
+<li><a href="spec/memory.html">Memory</a></li>
+<li><a href="spec/database.html">Database &amp; cache</a></li>
+<li><a href="spec/libraries.html">Libraries</a></li>
+<li><a href="spec/toolchain.html">Toolchain &amp; IR</a></li>
+<li><a href="spec/production.html">Production</a></li>
+</ul></section>
 <section><h2>Reference</h2><ul>
 <li><a href="reference/toolchain.html">Toolchain commands</a></li>
 <li><a href="reference/runtime-api.html">Runtime API</a></li>
@@ -33,7 +44,18 @@
 </nav>
 <main><h1>CForge</h1>
 
-<p>&lt;p class=&quot;hero&quot;&gt;A low-level systems language: explicit memory, optional native machine code, and a thin runtime for HTTP services.&lt;/p&gt;</p>
+<p>&lt;p class=&quot;hero&quot;&gt;Low-level systems language with a complete backend specification and a runnable HTTP/TLS/SQLite stack.&lt;/p&gt;</p>
+
+<h2>Documentation</h2>
+
+<table>
+<tr><th></th><th></th></tr>
+<table>
+<tr><th>**Book**</th><th>[Introduction](learn/introduction.html)</th></tr>
+<table>
+<tr><th>**Full backend spec**</th><th>[Specification index](spec/index.html) — 100% architecture document</th></tr>
+<table>
+<tr><th>**Status**</th><th>[Release 1.0](status.html)</th></tr>
 
 <p>CForge sits close to the machine. Handlers are written in <code>.cforge</code> files. Networking, HTTP, JSON, TLS, and SQLite live in a **C runtime library**, not in the language grammar.</p>
 

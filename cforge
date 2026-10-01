@@ -5,6 +5,7 @@ The language subset lowers to C, then to a native binary linked with the
 epoll runtime. HTTP, JSON, and SQLite stay in that runtime, not in the language.
 """
 
+import hashlib
 import os
 import shutil
 import signal
@@ -48,6 +49,7 @@ BASE_TYPES = {
     "Slice": "Slice",
     "Ctx": "Ctx",
 }
+STRUCT_TYPES = set()
 
 
 class CompileError(Exception):
@@ -155,12 +157,30 @@ class Parser:
         return t
 
     def parse(self):
+        structs = []
         fns = []
         while not self.at("eof"):
-            fns.append(self.parse_fn())
+            if self.at("kw", "struct"):
+                structs.append(self.parse_struct())
+            else:
+                fns.append(self.parse_fn())
         if not any(fn["name"] == "main" for fn in fns):
             raise CompileError("missing main")
-        return fns
+        return {"structs": structs, "fns": fns}
+
+    def parse_struct(self):
+        self.eat("kw", "struct")
+        name = self.eat("ident").value
+        self.eat("{")
+        fields = []
+        while not self.at("}"):
+            fname = self.eat("ident").value
+            self.eat(":")
+            ftype = self.parse_type()
+            self.eat(";")
+            fields.append({"name": fname, "type": ftype})
+        self.eat("}")
+        return {"name": name, "fields": fields}
 
     def parse_fn(self):
         line = self.eat("kw", "fn").line
@@ -189,7 +209,7 @@ class Parser:
             self.eat("*")
             stars += 1
         name = self.eat("ident").value
-        if name not in BASE_TYPES:
+        if name not in BASE_TYPES and name not in STRUCT_TYPES:
             raise CompileError(f"unknown type {name}")
         return {"name": name, "stars": stars}
 
@@ -333,7 +353,7 @@ class Parser:
 
 
 def ctype(typ):
-    base = BASE_TYPES[typ["name"]]
+    base = BASE_TYPES.get(typ["name"], typ["name"])
     if typ["stars"]:
         return base + " " + "* " * typ["stars"]
     return base
@@ -445,12 +465,22 @@ def gen_block(stmts, env, functions, indent):
     return lines
 
 
-def emit(fns):
+def emit(parsed):
+    structs = parsed["structs"]
+    fns = parsed["fns"]
+    for s in structs:
+        STRUCT_TYPES.add(s["name"])
     names = {fn["name"] for fn in fns}
     lines = [
         '#include "cforge_rt.h"',
         "",
     ]
+    for st in structs:
+        lines.append("typedef struct %s {" % st["name"])
+        for field in st["fields"]:
+            lines.append("    %s %s;" % (ctype(field["type"]), field["name"]))
+        lines.append("} %s;" % st["name"])
+        lines.append("")
     for fn in fns:
         cname = "cforge_main" if fn["name"] == "main" else fn["name"]
         params = ", ".join("%s %s" % (ctype(p["type"]), p["name"]) for p in fn["params"]) or "void"
@@ -482,12 +512,14 @@ def read_entry():
 
 
 def compile_cforge(src_path, out_c):
+    global STRUCT_TYPES
+    STRUCT_TYPES = set()
     with open(src_path, encoding="utf-8") as f:
         src = f.read()
-    fns = Parser(lex(src)).parse()
+    parsed = Parser(lex(src)).parse()
     os.makedirs(os.path.dirname(out_c), exist_ok=True)
     with open(out_c, "w", encoding="utf-8") as f:
-        f.write(emit(fns))
+        f.write(emit(parsed))
 
 
 def cc_cmd(out_bin):
@@ -510,6 +542,8 @@ def cc_cmd(out_bin):
         os.path.join(ROOT, "runtime", "server.c"),
         os.path.join(ROOT, "runtime", "json.c"),
         os.path.join(ROOT, "runtime", "db.c"),
+        os.path.join(ROOT, "runtime", "pool.c"),
+        os.path.join(ROOT, "runtime", "log.c"),
         "-lssl",
         "-lcrypto",
         "-pthread",
@@ -861,6 +895,24 @@ def machine_test():
         print("ok %s -> %s" % (rel, expect))
 
 
+def package_lock():
+    paths = ["cforge", "cforge_mach.py", "cforge.toml", "app/users.cforge"]
+    for name in sorted(os.listdir(os.path.join(ROOT, "runtime"))):
+        if name.endswith((".c", ".h")):
+            paths.append("runtime/" + name)
+    lines = ["# cforge.lock — reproducible build fingerprints", ""]
+    for rel in sorted(set(paths)):
+        path = os.path.join(ROOT, rel)
+        if not os.path.isfile(path):
+            continue
+        digest = hashlib.sha256(open(path, "rb").read()).hexdigest()
+        lines.append("%s %s" % (rel, digest))
+    lock = os.path.join(ROOT, "cforge.lock")
+    with open(lock, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    print(lock)
+
+
 def all_in_one():
     print("== test ==")
     test()
@@ -889,6 +941,8 @@ def main(argv):
         deploy()
     elif cmd == "status":
         status()
+    elif cmd == "package":
+        package_lock()
     elif cmd == "all":
         all_in_one()
     elif cmd == "machine":
@@ -896,7 +950,7 @@ def main(argv):
     elif cmd == "machine-test":
         machine_test()
     else:
-        print("usage: cforge build | check | run | test | deploy | status | all | machine | machine-test")
+        print("usage: cforge build | check | run | test | deploy | status | package | all | machine | machine-test")
         if cmd != "help":
             return 2
     return 0

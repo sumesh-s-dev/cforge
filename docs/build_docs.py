@@ -20,6 +20,17 @@ NAV = """
 <li><a href="{root}learn/runtime.html">Runtime &amp; HTTP</a></li>
 <li><a href="{root}learn/machine.html">Machine backend</a></li>
 </ul></section>
+<section><h2>Specification</h2><ul>
+<li><a href="{root}spec/index.html">Backend ecosystem</a></li>
+<li><a href="{root}spec/boundary.html">Language boundary</a></li>
+<li><a href="{root}spec/networking.html">Networking</a></li>
+<li><a href="{root}spec/http-async.html">HTTP &amp; async</a></li>
+<li><a href="{root}spec/memory.html">Memory</a></li>
+<li><a href="{root}spec/database.html">Database &amp; cache</a></li>
+<li><a href="{root}spec/libraries.html">Libraries</a></li>
+<li><a href="{root}spec/toolchain.html">Toolchain &amp; IR</a></li>
+<li><a href="{root}spec/production.html">Production</a></li>
+</ul></section>
 <section><h2>Reference</h2><ul>
 <li><a href="{root}reference/toolchain.html">Toolchain commands</a></li>
 <li><a href="{root}reference/runtime-api.html">Runtime API</a></li>

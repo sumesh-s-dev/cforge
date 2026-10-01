@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Database, pooling, cache, and message queues — CForge</title>
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="logo" href="../index.html">CForge</a>
+<section><h2>Learn</h2><ul>
+<li><a href="../learn/introduction.html">Introduction</a></li>
+<li><a href="../learn/install.html">Installation</a></li>
+<li><a href="../learn/first-program.html">First program</a></li>
+<li><a href="../learn/language.html">Language reference</a></li>
+<li><a href="../learn/memory.html">Memory &amp; slices</a></li>
+<li><a href="../learn/compiler.html">Compiler</a></li>
+<li><a href="../learn/runtime.html">Runtime &amp; HTTP</a></li>
+<li><a href="../learn/machine.html">Machine backend</a></li>
+</ul></section>
+<section><h2>Specification</h2><ul>
+<li><a href="../spec/index.html">Backend ecosystem</a></li>
+<li><a href="../spec/boundary.html">Language boundary</a></li>
+<li><a href="../spec/networking.html">Networking</a></li>
+<li><a href="../spec/http-async.html">HTTP &amp; async</a></li>
+<li><a href="../spec/memory.html">Memory</a></li>
+<li><a href="../spec/database.html">Database &amp; cache</a></li>
+<li><a href="../spec/libraries.html">Libraries</a></li>
+<li><a href="../spec/toolchain.html">Toolchain &amp; IR</a></li>
+<li><a href="../spec/production.html">Production</a></li>
+</ul></section>
+<section><h2>Reference</h2><ul>
+<li><a href="../reference/toolchain.html">Toolchain commands</a></li>
+<li><a href="../reference/runtime-api.html">Runtime API</a></li>
+<li><a href="../reference/environment.html">Environment</a></li>
+<li><a href="../reference/safety.html">Safety modes</a></li>
+</ul></section>
+<section><h2>Project</h2><ul>
+<li><a href="../status.html">Implementation status</a></li>
+<li><a href="https://github.com/sumesh-s-dev/cforge">GitHub</a></li>
+</ul></section>
+</nav>
+<main><h1>Database, pooling, cache, and message queues</h1>
+
+<p>Persistence and asynchronous messaging in the CForge ecosystem are **runtime libraries**, not language builtins. Release 0.1 ships SQLite for the users service; this spec defines the target architecture for connection pools, external databases, in-memory cache, and queue integrations.</p>
+
+<h2>SQLite (shipped)</h2>
+
+<p>**Shipped (0.1):** One <code>sqlite3</code> connection per process, opened before listen sockets. Schema:</p>
+
+<pre><code>
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    age INTEGER NOT NULL
+);
+</code></pre>
+
+<p>Pragmas at open: <code>journal_mode=WAL</code>, <code>synchronous=NORMAL</code>. Three prepared statements:</p>
+
+<pre><code>
+INSERT INTO users(name, age) VALUES (?1, ?2)
+SELECT id, name, age FROM users WHERE id = ?1
+DELETE FROM users WHERE id = ?1
+</code></pre>
+
+<p>Parameters are bound; SQL text is never concatenated with user input. <code>SQLITE_TRANSIENT</code> on insert copies name bytes out of the request arena. <code>SELECT</code> copies TEXT into the arena before <code>sqlite3_reset</code>.</p>
+
+<p>**Checkout discipline:** Each <code>db_*</code> call sets an internal checkout flag. After the handler returns, <code>cforge_db_release</code> resets all statements and clears bindings—standing in for “return connection to pool” with a pool size of one.</p>
+
+<p>Integer API:</p>
+
+<table>
+<tr><th>Return</th><th>Meaning</th></tr>
+<table>
+<tr><th>`0`</th><th>Success</th></tr>
+<table>
+<tr><th>`1`</th><th>Row missing (`GET`/`DELETE`)</th></tr>
+<table>
+<tr><th>`-1`</th><th>SQLite or bind error</th></tr>
+
+<p>Handlers map <code>-1</code> to <code>503</code> and increment <code>db_errors</code> in metrics.</p>
+
+<p><code>busy_timeout</code> is 1000 ms for contention with external tools opening the same file.</p>
+
+<h2>Connection pool (planned)</h2>
+
+<p>Target shape for PostgreSQL or MySQL:</p>
+
+<pre><code>
+Pool {
+  min, max connections
+  acquire(timeout) → PooledConn
+  release(conn) → return to idle or destroy if broken
+}
+</code></pre>
+
+<p>Rules:</p>
+
+<ul>
+<li>**Never** hold a pooled connection across <code>async</code> yield unless Model B explicitly pins conn to continuation</li>
+<ul>
+<li>One statement cache per connection; reset on release</li>
+<ul>
+<li>Health check query on idle timeout</li>
+<ul>
+<li>Metrics: <code>pool_wait_ms</code>, <code>pool_active</code>, <code>pool_idle</code>, <code>pool_create_failures</code></li>
+
+<p>Handlers keep the integer error policy; <code>db_get_user</code> becomes a thin wrapper over <code>SELECT</code> with dialect-specific types. Migrations run from toolchain (<code>cforge migrate</code>) applying versioned SQL files—not from handlers.</p>
+
+<h2>PostgreSQL wire client (planned)</h2>
+
+<p>Design options:</p>
+
+<table>
+<tr><th>Approach</th><th>Pros</th><th>Cons</th></tr>
+<table>
+<tr><th>libpq</th><th>Battle-tested, TLS built-in</th><th>C dependency, blocking API</th></tr>
+<table>
+<tr><th>Custom frontend/backend protocol</th><th>Full control</th><th>Large implementation</th></tr>
+<table>
+<tr><th>Embedded via CGO/Rust shim</th><th>Reuse ecosystem</th><th>FFI boundary discipline</th></tr>
+
+<p>CForge favors **libpq in worker threads** under Model B, with results marshaled into arena <code>Slice</code> on the reactor thread before handler return in hybrid mode.</p>
+
+<h2>Transaction boundaries</h2>
+
+<p>**0.1:** Each statement auto-commits. **Planned:** <code>db_tx_begin(ctx)</code> / <code>db_tx_commit</code> / <code>db_tx_rollback</code> storing tx state in <code>Ctx</code> extensions, forbidden across keep-alive requests unless explicitly bound to a session id.</p>
+
+<p>Isolation default: <code>READ COMMITTED</code> for OLTP handlers; serializable for financial slices via opt-in.</p>
+
+<h2>In-memory and distributed cache</h2>
+
+<p>Layers:</p>
+
+<p>1. **Request arena** — not a cache; discard every request</p>
+<p>2. **Process LRU** — fixed-size slab for hot keys (user by id, JWKS)</p>
+<p>3. **Redis** — shared cache and rate-limit counters</p>
+<p>4. **CDN** — HTTP cache headers for static content</p>
+
+<p>Cache API sketch:</p>
+
+<pre><code>
+cache_get(ctx, key_slice, value_out_slice) → hit/miss
+cache_set(ctx, key, value, ttl_sec) → status
+</code></pre>
+
+<p>Serialization format for values is caller-chosen (JSON blob, msgpack). **Stampede protection:** single-flight lock per key in process LRU; Redis <code>SET NX</code> for cross-node.</p>
+
+<p>Invalidation: explicit <code>cache_del</code> on write paths (<code>POST</code>/<code>DELETE</code> users); **planned** pub/sub channel <code>cache:invalidate</code> for multi-instance deployments.</p>
+
+<h2>Message queues (planned)</h2>
+
+<p>Use cases: outbox pattern for email, audit log shipping, search index updates, decoupled workers.</p>
+
+<table>
+<tr><th>System</th><th>Pattern</th><th>CForge integration</th></tr>
+<table>
+<tr><th>Kafka</th><th>Log-based, consumer groups</th><th>Background thread + batch publish</th></tr>
+<table>
+<tr><th>NATS</th><th>Lightweight pub/sub</th><th>Fire-and-forget sidecar goroutine equivalent in C</th></tr>
+<table>
+<tr><th>RabbitMQ</th><th>AMQP routing</th><th>Worker pool consumers</th></tr>
+<table>
+<tr><th>Redis Streams</th><th>Simple queue</th><th>Same client as cache</th></tr>
+
+<p>**Outbox table** (relational):</p>
+
+<pre><code>
+CREATE TABLE outbox (
+  id BIGSERIAL PRIMARY KEY,
+  payload BYTEA NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL,
+  published_at TIMESTAMPTZ
+);
+</code></pre>
+
+<p>Handler inserts user row and outbox row in one transaction; relay process publishes and marks <code>published_at</code>. This preserves **at-least-once** delivery without dual-write races.</p>
+
+<p>Handlers should not block on publish; Model B workers drain outbox. Metrics: <code>outbox_lag_seconds</code>, <code>publish_failures</code>.</p>
+
+<h2>Read replicas and routing</h2>
+
+<p>**Planned:** <code>db_read</code> vs <code>db_write</code> pool handles; sticky primary for session consistency. Handlers remain unaware if the runtime routes <code>SELECT</code> to replica based on <code>Ctx</code> read-only flag set by middleware.</p>
+
+<h2>Backup and migrations</h2>
+
+<p>Operational requirements:</p>
+
+<ul>
+<li>SQLite: file snapshot when process stopped or <code>VACUUM INTO</code></li>
+<ul>
+<li>PostgreSQL: WAL archiving, PITR</li>
+<ul>
+<li>Migrations versioned in <code>migrations/</code> applied by <code>cforge migrate</code> with advisory lock</li>
+
+<h2>Security</h2>
+
+<ul>
+<li>Least-privilege DB roles per service binary</li>
+<ul>
+<li>No dynamic SQL from handler strings</li>
+<ul>
+<li>Encrypt connections (TLS to Postgres)</li>
+<ul>
+<li>Secrets from environment or vault sidecar, not committed files</li>
+
+<h2>0.1 vs target summary</h2>
+
+<table>
+<tr><th>Capability</th><th>0.1</th><th>Target</th></tr>
+<table>
+<tr><th>Engine</th><th>SQLite file</th><th>Postgres primary</th></tr>
+<table>
+<tr><th>Pool</th><th>Single conn</th><th>Sized pool + health</th></tr>
+<table>
+<tr><th>Cache</th><th>None</th><th>LRU + Redis</th></tr>
+<table>
+<tr><th>Queues</th><th>None</th><th>Outbox + Kafka/NATS</th></tr>
+<table>
+<tr><th>Migrations</th><th>Embedded `CREATE TABLE`</th><th>Toolchain migrator</th></tr>
+
+<p>See <a href="http-async.html">http-async.html</a> for handler error mapping and <a href="production.html">production.html</a> for SLO impact of pool wait time.</p>
+<footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
+</main>
+</div>
+</body>
+</html>

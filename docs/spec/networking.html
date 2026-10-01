@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Networking and transport — CForge</title>
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="logo" href="../index.html">CForge</a>
+<section><h2>Learn</h2><ul>
+<li><a href="../learn/introduction.html">Introduction</a></li>
+<li><a href="../learn/install.html">Installation</a></li>
+<li><a href="../learn/first-program.html">First program</a></li>
+<li><a href="../learn/language.html">Language reference</a></li>
+<li><a href="../learn/memory.html">Memory &amp; slices</a></li>
+<li><a href="../learn/compiler.html">Compiler</a></li>
+<li><a href="../learn/runtime.html">Runtime &amp; HTTP</a></li>
+<li><a href="../learn/machine.html">Machine backend</a></li>
+</ul></section>
+<section><h2>Specification</h2><ul>
+<li><a href="../spec/index.html">Backend ecosystem</a></li>
+<li><a href="../spec/boundary.html">Language boundary</a></li>
+<li><a href="../spec/networking.html">Networking</a></li>
+<li><a href="../spec/http-async.html">HTTP &amp; async</a></li>
+<li><a href="../spec/memory.html">Memory</a></li>
+<li><a href="../spec/database.html">Database &amp; cache</a></li>
+<li><a href="../spec/libraries.html">Libraries</a></li>
+<li><a href="../spec/toolchain.html">Toolchain &amp; IR</a></li>
+<li><a href="../spec/production.html">Production</a></li>
+</ul></section>
+<section><h2>Reference</h2><ul>
+<li><a href="../reference/toolchain.html">Toolchain commands</a></li>
+<li><a href="../reference/runtime-api.html">Runtime API</a></li>
+<li><a href="../reference/environment.html">Environment</a></li>
+<li><a href="../reference/safety.html">Safety modes</a></li>
+</ul></section>
+<section><h2>Project</h2><ul>
+<li><a href="../status.html">Implementation status</a></li>
+<li><a href="https://github.com/sumesh-s-dev/cforge">GitHub</a></li>
+</ul></section>
+</nav>
+<main><h1>Networking and transport</h1>
+
+<p>CForge’s reference server is built on **Linux BSD sockets** and **edge-triggered readiness** via <code>epoll</code>. This document specifies transport behavior for the shipped users service and the broader ecosystem design for UDP, connection tuning, TLS as a transport adapter, and future kernel interfaces.</p>
+
+<h2>TCP server model</h2>
+
+<p>**Shipped (0.1):** One OS thread owns one <code>epoll</code> instance. Listen sockets for plain HTTP and optional TLS are registered with distinct user-data tags. Accepted connections become non-blocking (<code>accept4</code> with <code>SOCK_NONBLOCK | SOCK_CLOEXEC</code>), with <code>TCP_NODELAY</code> and <code>SO_KEEPALIVE</code> enabled.</p>
+
+<p>Connection state lives in a **fixed slot table** sized by <code>CFORGE_MAX_CONNS</code> (default 128, clamped 1–4096 via environment). Each slot tracks:</p>
+
+<ul>
+<li>File descriptor and optional <code>SSL *</code></li>
+<ul>
+<li>Read buffer cursor (<code>in_off</code>, <code>in_len</code>) over a preallocated <code>in[]</code> slab</li>
+<ul>
+<li>Write state over <code>out[]</code></li>
+<ul>
+<li>Last activity timestamp for idle close</li>
+<ul>
+<li>Epoll interest mask (<code>EPOLLIN</code>, <code>EPOLLOUT</code>)</li>
+
+<p>When all slots are busy, listen sockets are **removed from epoll** so the kernel backlog absorbs pressure (<code>accept_paused</code> metric). This is deliberate backpressure: the process does not accept fds it cannot service.</p>
+
+<h2>Read and write semantics</h2>
+
+<p>Reads append to <code>in[]</code> until <code>EAGAIN</code>. Partial HTTP requests stay in place; the parser returns “need more bytes” without consuming incomplete data. When the user read buffer is full, <code>EPOLLIN</code> is dropped until the handler consumes or rejects the request—preventing busy loops on slow clients.</p>
+
+<p>Writes buffer the full HTTP response in <code>out[]</code> before the first <code>write</code> or <code>SSL_write</code>. If the syscall returns <code>EAGAIN</code>, <code>EPOLLOUT</code> is armed and the event loop resumes when the socket is writable. <code>SIGPIPE</code> is ignored; closed peers surface as <code>EPIPE</code> and trigger slot teardown.</p>
+
+<p>Idle connections are scanned on <code>epoll_wait</code> timeout (approximately 500 ms, or half of <code>CFORGE_IDLE_MS</code> when under one second). Slots exceeding the idle budget close regardless of keep-alive negotiation—this doubles as slow-client protection for half-sent headers.</p>
+
+<h2>epoll user-data encoding</h2>
+
+<p>**Shipped (0.1)** uses small integer cookies in <code>epoll_event.data.u64</code>:</p>
+
+<table>
+<tr><th>Cookie</th><th>Source</th></tr>
+<table>
+<tr><th>`1`</th><th>`eventfd` for shutdown (`SIGTERM` / `SIGINT`)</th></tr>
+<table>
+<tr><th>`2`</th><th>HTTP listen socket</th></tr>
+<table>
+<tr><th>`3`</th><th>TLS listen socket</th></tr>
+<table>
+<tr><th>`10 + index`</th><th>Connection slot `index`</th></tr>
+
+<p>Signal handlers only set a flag and write eight bytes to the eventfd; they do not allocate. Shutdown closes listeners first, marks in-flight connections for close-after-response, then frees global slabs when <code>active_connections</code> reaches zero.</p>
+
+<p>**Planned:** Per-listener load metrics, <code>EPOLLONESHOT</code> for accept thundering herds on multi-listener deployments, and optional <code>SO_REUSEPORT</code> fan-out across worker processes.</p>
+
+<h2>UDP (design)</h2>
+
+<p>Release 0.1 does not expose UDP in the runtime API. The ecosystem design includes:</p>
+
+<table>
+<tr><th>Use case</th><th>API shape</th><th>Notes</th></tr>
+<table>
+<tr><th>DNS resolution</th><th>Blocking `getaddrinfo` off hot path</th><th>Cached in startup or worker thread</th></tr>
+<table>
+<tr><th>QUIC / HTTP/3</th><th>UDP socket + userspace stack</th><th>Separate from epoll HTTP/1 loop initially</th></tr>
+<table>
+<tr><th>Metrics push</th><th>Connected UDP to collector</th><th>Fire-and-forget with drop counter</th></tr>
+<table>
+<tr><th>Game / RTC</th><th>Dedicated reactor thread</th><th>Not mixed with HTTP slot table</th></tr>
+
+<p>UDP endpoints would register parallel epoll entries with the same slot discipline or a smaller datagram ring buffer to avoid per-packet malloc.</p>
+
+<h2>TLS as transport</h2>
+
+<p>TLS terminates in the runtime before bytes are interpreted as HTTP. **Shipped (0.1):** OpenSSL drives <code>SSL_accept</code>, <code>SSL_read</code>, <code>SSL_write</code> on the connection slot. Plaintext HTTP still lands in <code>in[]</code>; ciphertext never escapes to handlers.</p>
+
+<p>Context configuration:</p>
+
+<ul>
+<li>TLS 1.3 only (min and max protocol version pinned)</li>
+<ul>
+<li>Renegotiation and compression disabled</li>
+<ul>
+<li>PEM certificate and private key from environment paths</li>
+<ul>
+<li>Handshake failure closes the socket with no HTTP response</li>
+
+<p>Dual listeners: HTTP on <code>PORT</code> (default 8080), HTTPS on <code>TLS_PORT</code> (default 8443) when cert and key are set. **Planned:** ALPN for <code>h2</code>, session tickets, OCSP stapling, mutual TLS for service-to-service calls.</p>
+
+<h2>Addressing and bind policy</h2>
+
+<p><code>CFORGE_BIND</code> defaults to <code>127.0.0.1</code>. Production guidance: bind loopback behind a reverse proxy unless the deployment model requires direct exposure. IPv6 listener support is **planned** (<code>getaddrinfo</code> with <code>AI_PASSIVE</code>, separate slot limits per address family).</p>
+
+<h2>Connection lifecycle diagram</h2>
+
+<pre><code>
+        listen (HTTP/TLS)
+              │
+              ▼
+           accept4 ──► slot allocate
+              │
+              ├─► [TLS] SSL_accept loop until OK or fatal
+              │
+              ▼
+         EPOLLIN ──► read ──► HTTP parser
+              │
+              ▼
+           handler
+              │
+              ▼
+         EPOLLOUT ◄── write until drained or EAGAIN
+              │
+              ├─► keep-alive ──► wait EPOLLIN
+              └─► close / idle / shutdown flag ──► SSL_free, close(fd), free slot
+</code></pre>
+
+<h2>Kernel alternatives (roadmap)</h2>
+
+<table>
+<tr><th>API</th><th>When to adopt</th><th>Tradeoff</th></tr>
+<table>
+<tr><th>`epoll`</th><th>Default single-thread server</th><th>Simple, mature</th></tr>
+<table>
+<tr><th>`io_uring`</th><th>High QPS, batch reads</th><th>Complexity, kernel version floor</th></tr>
+<table>
+<tr><th>Thread pool + `poll`</th><th>Portable non-Linux</th><th>Not a CForge 0.1 target</th></tr>
+
+<p>Any migration keeps the **handler ABI** unchanged: only the reactor implementation swaps.</p>
+
+<h2>Observability hooks</h2>
+
+<p>Per-connection counters feed <code>/metrics</code> in 0.1: <code>requests_total</code>, <code>active_connections</code>, <code>db_errors</code>, <code>accept_paused</code>. **Planned:** histogram of accept-to-response latency, TLS handshake failures, read/write <code>EAGAIN</code> counts, and epoll wake reasons tagged by cookie type.</p>
+
+<h2>Failure matrix</h2>
+
+<table>
+<tr><th>Event</th><th>Action</th></tr>
+<table>
+<tr><th>Peer reset during read</th><th>Drop slot, decrement active</th></tr>
+<table>
+<tr><th>Malformed TLS alert</th><th>Close slot, no HTTP body</th></tr>
+<table>
+<tr><th>Listen backlog full</th><th>Kernel drops SYN; client retries</th></tr>
+<table>
+<tr><th>`EMFILE` on accept</th><th>Log once, pause accept until slot frees</th></tr>
+
+<p>Networking detail for HTTP parsing and routing continues in <a href="http-async.html">http-async.html</a>. Memory ownership for buffers is in <a href="memory.html">memory.html</a>.</p>
+<footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
+</main>
+</div>
+</body>
+</html>

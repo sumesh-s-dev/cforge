@@ -297,7 +297,7 @@ def elf64(code, entry_off):
 def compile_machine(src_path, out_path):
     with open(src_path, encoding="utf-8") as f:
         src = f.read()
-    fns = Parser(lex(src)).parse()
+    fns = Parser(lex(src)).parse()["fns"]
     if not any(fn["name"] == "main" for fn in fns):
         raise CompileError("machine program needs main")
     for fn in fns:

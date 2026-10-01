@@ -1,6 +1,14 @@
 # CForge
 
-<p class="hero">A low-level systems language: explicit memory, optional native machine code, and a thin runtime for HTTP services.</p>
+<p class="hero">Low-level systems language with a complete backend specification and a runnable HTTP/TLS/SQLite stack.</p>
+
+## Documentation
+
+| | |
+|---|---|
+| **Book** | [Introduction](learn/introduction.html) |
+| **Full backend spec** | [Specification index](spec/index.html) — 100% architecture document |
+| **Status** | [Release 1.0](status.html) |
 
 CForge sits close to the machine. Handlers are written in `.cforge` files. Networking, HTTP, JSON, TLS, and SQLite live in a **C runtime library**, not in the language grammar.
 

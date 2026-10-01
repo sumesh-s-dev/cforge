@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Libraries: packages, config, auth, errors, logging, observability — CForge</title>
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="logo" href="../index.html">CForge</a>
+<section><h2>Learn</h2><ul>
+<li><a href="../learn/introduction.html">Introduction</a></li>
+<li><a href="../learn/install.html">Installation</a></li>
+<li><a href="../learn/first-program.html">First program</a></li>
+<li><a href="../learn/language.html">Language reference</a></li>
+<li><a href="../learn/memory.html">Memory &amp; slices</a></li>
+<li><a href="../learn/compiler.html">Compiler</a></li>
+<li><a href="../learn/runtime.html">Runtime &amp; HTTP</a></li>
+<li><a href="../learn/machine.html">Machine backend</a></li>
+</ul></section>
+<section><h2>Specification</h2><ul>
+<li><a href="../spec/index.html">Backend ecosystem</a></li>
+<li><a href="../spec/boundary.html">Language boundary</a></li>
+<li><a href="../spec/networking.html">Networking</a></li>
+<li><a href="../spec/http-async.html">HTTP &amp; async</a></li>
+<li><a href="../spec/memory.html">Memory</a></li>
+<li><a href="../spec/database.html">Database &amp; cache</a></li>
+<li><a href="../spec/libraries.html">Libraries</a></li>
+<li><a href="../spec/toolchain.html">Toolchain &amp; IR</a></li>
+<li><a href="../spec/production.html">Production</a></li>
+</ul></section>
+<section><h2>Reference</h2><ul>
+<li><a href="../reference/toolchain.html">Toolchain commands</a></li>
+<li><a href="../reference/runtime-api.html">Runtime API</a></li>
+<li><a href="../reference/environment.html">Environment</a></li>
+<li><a href="../reference/safety.html">Safety modes</a></li>
+</ul></section>
+<section><h2>Project</h2><ul>
+<li><a href="../status.html">Implementation status</a></li>
+<li><a href="https://github.com/sumesh-s-dev/cforge">GitHub</a></li>
+</ul></section>
+</nav>
+<main><h1>Libraries: packages, config, auth, errors, logging, observability</h1>
+
+<p>Beyond HTTP and storage, a production CForge deployment composes **libraries** linked into the runtime or loaded as plugins. None of these are language syntax; they expose C ABI entry points and environment hooks. This page catalogs the ecosystem design and what release 0.1 actually links.</p>
+
+<h2>Package model</h2>
+
+<p>**Shipped (0.1):** <code>cforge.toml</code> is minimal:</p>
+
+<pre><code>
+[package]
+name = &quot;users&quot;
+entry = &quot;app/users.cforge&quot;
+</code></pre>
+
+<p>The <code>cforge</code> driver resolves the entry file, emits <code>build/&lt;name&gt;.gen.c</code>, compiles runtime sources, and links a single binary. There is no remote registry, version solver, or transitive dependencies.</p>
+
+<p>**Planned package manifest:**</p>
+
+<pre><code>
+[package]
+name = &quot;users&quot;
+version = &quot;0.2.0&quot;
+entry = &quot;app/users.cforge&quot;
+
+[dependencies]
+cforge-http = &quot;1.0&quot;
+cforge-pg = &quot;0.3&quot;
+
+[features]
+default = [&quot;tls&quot;]
+tls = [&quot;cforge-http/tls&quot;]
+</code></pre>
+
+<p>Packages publish as source trees or static archives with a <code>cforge.lock</code> pinning hashes. <code>cforge vendor</code> copies dependencies into <code>vendor/</code> for reproducible CI. The compiler whitelists callable symbols per dependency’s <code>exports.txt</code>.</p>
+
+<h2>Configuration</h2>
+
+<p>**Shipped (0.1):** Environment variables only (<code>PORT</code>, <code>TLS_PORT</code>, <code>CFORGE_BIND</code>, <code>CFORGE_DB</code>, TLS paths, <code>CFORGE_MAX_CONNS</code>, <code>CFORGE_IDLE_MS</code>). No config file parser in the binary.</p>
+
+<p>**Planned layers:**</p>
+
+<table>
+<tr><th>Source</th><th>Precedence</th><th>Use</th></tr>
+<table>
+<tr><th>CLI flags</th><th>Highest</th><th>One-off overrides</th></tr>
+<table>
+<tr><th>Environment</th><th>High</th><th>12-factor containers</th></tr>
+<table>
+<tr><th>`cforge.toml` `[env]`</th><th>Medium</th><th>Defaults in repo</th></tr>
+<table>
+<tr><th>File `cforge.yaml`</th><th>Low</th><th>Structured multi-section config</th></tr>
+
+<p>Hot reload: SIGHUP or admin endpoint reloads non-secret sections; secrets rotate via file watch on symlink swap. Typed accessors <code>config_u16(&quot;server.port&quot;)</code> avoid string typos in handlers.</p>
+
+<h2>Authentication and authorization</h2>
+
+<p>**0.1:** No auth on the users API (localhost deployment assumption).</p>
+
+<p>**Planned library <code>cforge-auth</code>:**</p>
+
+<ul>
+<li>Password verify: Argon2id with per-user salt stored in DB</li>
+<ul>
+<li>JWT issue/validate: Ed25519 keys, <code>exp</code>/<code>iss</code>/<code>aud</code> checks, constant-time compare</li>
+<ul>
+<li>API keys: HMAC-signed tokens in header <code>X-Api-Key</code></li>
+<ul>
+<li>RBAC: role claims in JWT mapped to route middleware allowlists</li>
+
+<p>Middleware runs as <code>CForgeFn</code> wrappers registered before route handlers. Failed auth returns <code>401</code>/<code>403</code> without invoking business logic.</p>
+
+<p>OAuth2 authorization code flow belongs in a separate admin binary or edge gateway; the service runtime only validates bearer tokens.</p>
+
+<h2>Errors</h2>
+
+<p>Two layers:</p>
+
+<p>1. **Runtime protocol errors** — fixed HTTP statuses before handlers (malformed request)</p>
+<p>2. **Application errors** — integer codes from <code>db_*</code>, <code>json_*</code>, handler logic</p>
+
+<p>**Planned standardization:**</p>
+
+<ul>
+<li><code>cforge_error</code> enum in headers for tooling</li>
+<ul>
+<li>Problem Details JSON (<code>type</code>, <code>title</code>, <code>status</code>, <code>detail</code>, <code>instance</code>)</li>
+<ul>
+<li>Correlation id header <code>X-Request-Id</code> generated at accept, stored in <code>Ctx</code>, echoed in logs</li>
+
+<p>No stack traces to clients in production; <code>detail</code> is sanitized.</p>
+
+<h2>Logging</h2>
+
+<p>**Shipped (0.1):** One stderr line per queued response:</p>
+
+<pre><code>
+INFO status_queued method=GET path=/health
+</code></pre>
+
+<p>systemd journal captures stderr. Status numeric code is not in the log line—only in wire bytes.</p>
+
+<p>**Planned structured logging:**</p>
+
+<ul>
+<li>Key-value fields: <code>ts</code>, <code>level</code>, <code>request_id</code>, <code>method</code>, <code>path</code>, <code>status</code>, <code>duration_us</code>, <code>db_wait_us</code></li>
+<ul>
+<li>Log levels: ERROR, WARN, INFO, DEBUG (compile-time strip DEBUG in release)</li>
+<ul>
+<li>Optional JSON lines to stdout for Loki/Elasticsearch</li>
+<ul>
+<li>Secret redaction filter on <code>Authorization</code> and cookie headers</li>
+
+<p>Signal-safe logging on critical paths: preformatted ring buffer written from signal handler for crash dumps only.</p>
+
+<h2>Observability</h2>
+
+<p>**Shipped (0.1):** <code>GET /metrics</code> text format:</p>
+
+<pre><code>
+requests_total
+active_connections
+db_errors
+accept_paused
+</code></pre>
+
+<p>**Planned telemetry stack:**</p>
+
+<table>
+<tr><th>Signal</th><th>Mechanism</th><th>Notes</th></tr>
+<table>
+<tr><th>Metrics</th><th>Prometheus exposition on `/metrics`</th><th>Histograms, labels for route</th></tr>
+<table>
+<tr><th>Tracing</th><th>OpenTelemetry C SDK</th><th>Span per request, child spans for DB</th></tr>
+<table>
+<tr><th>Profiling</th><th>`perf` / continuous CPU samples</th><th>Triggered by admin port</th></tr>
+<table>
+<tr><th>Health</th><th>`/health` liveness, `/ready` checks DB</th><th>Kubernetes probes</th></tr>
+
+<p>Cardinality control: aggregate by route pattern, not raw path (avoid <code>:id</code> explosion).</p>
+
+<h2>Security libraries (cross-cutting)</h2>
+
+<ul>
+<li>**TLS:** OpenSSL today; consider BoringSSL build flavor</li>
+<ul>
+<li>**Crypto:** libsodium for new code paths (JWT, cookies)</li>
+<ul>
+<li>**Input validation:** max lengths enforced in runtime parsers, duplicated in handlers only for domain rules</li>
+<ul>
+<li>**Rate limiting:** token bucket in Redis or in-process sharded counters</li>
+<ul>
+<li>**CSRF:** relevant for cookie sessions on HTML forms, not JSON API default</li>
+
+<p>See <a href="toolchain.html">toolchain.html</a> for supply-chain and build hardening.</p>
+
+<h2>HTTP client (planned)</h2>
+
+<p>Outbound calls for BFF patterns:</p>
+
+<pre><code>
+http_client_get(url_slice, headers, body_out) → status
+</code></pre>
+
+<p>Connection pool per host, TLS verify with system CA bundle, timeout per request. Never called from Model A reactor thread without blocking risk—use Model B workers.</p>
+
+<h2>Email, SMS, webhooks</h2>
+
+<p>Thin adapters behind queue consumers. Handlers enqueue intent; workers call external APIs with retries and exponential backoff. Idempotency keys stored in outbox or dedup table.</p>
+
+<h2>Internationalization</h2>
+
+<p>Not on server hot path for JSON APIs. **Planned** <code>Accept-Language</code> negotiation for HTML error pages generated by runtime templates.</p>
+
+<h2>Testing libraries</h2>
+
+<p>**Shipped:** <code>./cforge test</code> integration harness. **Planned:** <code>cforge-test</code> crate with assert macros on HTTP responses, snapshot JSON bodies, and fake clock for idle timeout tests.</p>
+
+<h2>Documentation generation</h2>
+
+<p>OpenAPI from route metadata annotations in comments or sidecar YAML; <code>cforge docgen</code> emits spec for consumers. Keeps handlers as source of truth for paths and methods.</p>
+
+<h2>Summary matrix</h2>
+
+<table>
+<tr><th>Library area</th><th>0.1</th><th>Planned entry</th></tr>
+<table>
+<tr><th>Packages</th><th>Single binary</th><th>Registry + lockfile</th></tr>
+<table>
+<tr><th>Config</th><th>Env vars</th><th>Layered config</th></tr>
+<table>
+<tr><th>Auth</th><th>None</th><th>JWT + middleware</th></tr>
+<table>
+<tr><th>Errors</th><th>Integer + HTTP</th><th>Problem Details</th></tr>
+<table>
+<tr><th>Logging</th><th>stderr INFO</th><th>Structured JSON</th></tr>
+<table>
+<tr><th>Metrics</th><th>Four counters</th><th>Prometheus + traces</th></tr>
+
+<p>Integration with storage and queues is in <a href="database.html">database.html</a>; deployment wiring in <a href="production.html">production.html</a>.</p>
+<footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
+</main>
+</div>
+</body>
+</html>

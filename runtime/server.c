@@ -384,7 +384,7 @@ static void dispatch(Conn *c, int method, Slice path, Slice body, int close_afte
     size_t pl = path.len < 128 ? path.len : 128;
     if (path.ptr && pl) memcpy(logpath, path.ptr, pl);
     logpath[pl] = 0;
-    fprintf(stderr, "INFO status_queued method=%s path=%s\n", method_name(method), logpath);
+    cforge_logf(2, "request method=%s path=%s", method_name(method), logpath);
 }
 
 static int header_name_eq(const uint8_t *s, size_t n, const char *lit) {
