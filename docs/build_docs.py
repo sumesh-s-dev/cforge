@@ -48,8 +48,28 @@ def md_to_html(text):
     lines = text.splitlines()
     out = []
     in_pre = False
+    in_ul = False
+    in_table = False
+
+    def close_ul():
+        nonlocal in_ul
+        if in_ul:
+            out.append("</ul>")
+            in_ul = False
+
+    def close_table():
+        nonlocal in_table
+        if in_table:
+            out.append("</table>")
+            in_table = False
+
+    def close_blocks():
+        close_ul()
+        close_table()
+
     for line in lines:
         if line.startswith("```"):
+            close_blocks()
             if in_pre:
                 out.append("</code></pre>")
                 in_pre = False
@@ -61,43 +81,52 @@ def md_to_html(text):
             out.append(html.escape(line))
             continue
         if line.startswith("### "):
+            close_blocks()
             out.append("<h3>%s</h3>" % html.escape(line[4:]))
         elif line.startswith("## "):
+            close_blocks()
             out.append("<h2>%s</h2>" % html.escape(line[3:]))
         elif line.startswith("# "):
+            close_blocks()
             out.append("<h1>%s</h1>" % html.escape(line[2:]))
         elif line.strip() == "":
-            out.append("")
+            continue
         elif line.startswith("|"):
-            if out and out[-1] != "<table>":
+            close_ul()
+            if not in_table:
                 out.append("<table>")
+                in_table = True
             cells = [c.strip() for c in line.strip("|").split("|")]
             if all(re.match(r"^[-:]+$", c) for c in cells):
                 continue
             tag = "th" if out[-1] == "<table>" else "td"
-            out.append("<tr>" + "".join("<%s>%s</%s>" % (tag, html.escape(c), tag) for c in cells) + "</tr>")
+            out.append(
+                "<tr>"
+                + "".join("<%s>%s</%s>" % (tag, inline_md(c), tag) for c in cells)
+                + "</tr>"
+            )
         elif line.startswith("- "):
-            if not out or not out[-1].startswith("<ul"):
+            close_table()
+            if not in_ul:
                 out.append("<ul>")
+                in_ul = True
             out.append("<li>%s</li>" % inline_md(line[2:]))
+        elif re.match(r"^\s*<", line):
+            close_blocks()
+            out.append(line.strip())
         else:
-            if out and out[-1] == "<ul>":
-                out.append("</ul>")
-            if out and out[-1] == "<table>":
-                out.append("</table>")
+            close_blocks()
             out.append("<p>%s</p>" % inline_md(line))
     if in_pre:
         out.append("</code></pre>")
-    if out and out[-1] == "<ul>":
-        out.append("</ul>")
-    if out and out[-1] == "<table>":
-        out.append("</table>")
+    close_blocks()
     return "\n".join(out)
 
 
 def inline_md(s):
     s = html.escape(s)
     s = re.sub(r"`([^`]+)`", r"<code>\1</code>", s)
+    s = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", s)
     s = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2">\1</a>', s)
     return s
 

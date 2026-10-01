@@ -43,51 +43,34 @@
 </ul></section>
 </nav>
 <main><h1>Safety modes</h1>
-
-<p>CForge prioritizes **control** over automatic memory safety.</p>
-
+<p>CForge prioritizes <strong>control</strong> over automatic memory safety.</p>
 <h2>Release 0.1</h2>
-
 <table>
 <tr><th>Mode</th><th>Status</th></tr>
-<table>
-<tr><th>Explicit pointers and slices</th><th>**Implemented**</th></tr>
-<table>
-<tr><th>Request arena reset</th><th>**Implemented**</th></tr>
-<table>
-<tr><th>`@unsafe` / `@checked` / `@safe` attributes</th><th>**Planned**</th></tr>
-
+<tr><td>Explicit pointers and slices</td><td><strong>Implemented</strong></td></tr>
+<tr><td>Request arena reset</td><td><strong>Implemented</strong></td></tr>
+<tr><td><code>@unsafe</code> / <code>@checked</code> / <code>@safe</code> attributes</td><td><strong>Planned</strong></td></tr>
+</table>
 <h2>Planned compiler modes</h2>
-
 <h3>@unsafe (default)</h3>
-
 <p>No extra checks. Programmer responsible for lifetimes, data races, and use-after-free.</p>
-
 <h3>@checked (debug / test builds)</h3>
-
 <ul>
 <li>Slice index bounds checks where indexing is added to the language</li>
-<ul>
 <li>Optional arena generation counter to trap use-after-reset in tests</li>
-<ul>
 <li>Sanitizer-friendly build profiles (ASan / UBSan / TSan when linked)</li>
-
+</ul>
 <h3>@safe (application tier lint)</h3>
-
 <ul>
 <li>Static checks for storing request <code>Slice</code> into globals</li>
-<ul>
 <li>Stricter parser limits enforced at compile time</li>
-
-<p>These modes do **not** make CForge Rust. They reduce obvious footguns without a borrow checker.</p>
-
+</ul>
+<p>These modes do <strong>not</strong> make CForge Rust. They reduce obvious footguns without a borrow checker.</p>
 <h2>What we do not promise</h2>
-
 <ul>
 <li>Freedom from use-after-free or data races in <code>@unsafe</code></li>
-<ul>
 <li>Cryptographic correctness of hand-written Forge crypto (use audited libraries via runtime)</li>
-
+</ul>
 <p>See <a href="../learn/introduction.html">Introduction</a> for philosophy.</p>
 <footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
 </main>

@@ -43,11 +43,8 @@
 </ul></section>
 </nav>
 <main><h1>First program</h1>
-
 <h2>Server path: register a route</h2>
-
 <p>Edit <code>app/users.cforge</code> or add handlers in <code>main</code>:</p>
-
 <pre><code>
 fn hello(ctx: *Ctx) -&gt; i32 {
     return ctx_text(ctx, 200, &quot;hello&quot;);
@@ -58,21 +55,15 @@ fn main() -&gt; i32 {
     return app_listen(0);
 }
 </code></pre>
-
 <p>Build and run:</p>
-
 <pre><code>
 ./cforge build
 PORT=9090 CFORGE_DB=data/users.db ./build/cforge-users
 curl http://127.0.0.1:9090/hello
 </code></pre>
-
 <p><code>app_listen(0)</code> reads <code>PORT</code> (default <code>8080</code>).</p>
-
 <h2>Machine path: native ELF</h2>
-
 <p><code>mach/add.cforge</code>:</p>
-
 <pre><code>
 fn add(a: u64, b: u64) -&gt; u64 {
     add r0, r1;
@@ -83,31 +74,23 @@ fn main() -&gt; u64 {
     return add(2, 3);
 }
 </code></pre>
-
 <pre><code>
 ./cforge machine mach/add.cforge -o build/add
 ./build/add
 echo $?   # 5
 </code></pre>
-
 <p>Or high-level return (lowered to add + ret):</p>
-
 <pre><code>
 fn add(a: u64, b: u64) -&gt; u64 {
     return a + b;
 }
 </code></pre>
-
 <h2>Full stack example</h2>
-
 <p>The repository includes <code>POST /users</code>, <code>GET /users/:id</code>, and <code>DELETE /users/:id</code> against SQLite. See <a href="runtime.html">Runtime &amp; HTTP</a> and the repo <code>END-TO-END.md</code>.</p>
-
 <h2>Toolchain one-liner</h2>
-
 <pre><code>
 ./cforge all
 </code></pre>
-
 <p>Runs tests, local deploy, and <code>git push</code> when the tree is clean.</p>
 <footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
 </main>

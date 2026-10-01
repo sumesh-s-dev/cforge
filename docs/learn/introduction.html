@@ -43,26 +43,17 @@
 </ul></section>
 </nav>
 <main><h1>Introduction</h1>
-
-<p>CForge is a systems programming language prototype. The goal is **machine-level control** without a mandatory garbage collector, hidden allocations, or heavyweight async runtime.</p>
-
+<p>CForge is a systems programming language prototype. The goal is <strong>machine-level control</strong> without a mandatory garbage collector, hidden allocations, or heavyweight async runtime.</p>
 <h2>Design principles</h2>
-
 <ul>
-<li>**No hidden work** — allocation, syscalls, and buffer lifetimes are visible.</li>
-<ul>
-<li>**Libraries, not language features** — HTTP, JSON, TLS, and SQL are runtime code you link, not syntax built into the compiler.</li>
-<ul>
-<li>**Two backends** — rapid iteration through C codegen; native ELF for registers and syscalls on x86-64.</li>
-<ul>
-<li>**Explicit memory** — connection buffers, request arenas, and <code>Slice</code> views; reset arenas per request instead of GC.</li>
-
+<li><strong>No hidden work</strong> — allocation, syscalls, and buffer lifetimes are visible.</li>
+<li><strong>Libraries, not language features</strong> — HTTP, JSON, TLS, and SQL are runtime code you link, not syntax built into the compiler.</li>
+<li><strong>Two backends</strong> — rapid iteration through C codegen; native ELF for registers and syscalls on x86-64.</li>
+<li><strong>Explicit memory</strong> — connection buffers, request arenas, and <code>Slice</code> views; reset arenas per request instead of GC.</li>
+</ul>
 <h2>What CForge is not</h2>
-
-<p>CForge is **not** a memory-safe language like Rust. It does **not** replace PostgreSQL, Kubernetes, or a full package ecosystem in release 0.1. See <a href="../status.html">Implementation status</a> for the exact matrix.</p>
-
+<p>CForge is <strong>not</strong> a memory-safe language like Rust. It does <strong>not</strong> replace PostgreSQL, Kubernetes, or a full package ecosystem in release 0.1. See <a href="../status.html">Implementation status</a> for the exact matrix.</p>
 <h2>Architecture</h2>
-
 <pre><code>
 Application (.cforge)
         ↓
@@ -72,24 +63,16 @@ C runtime (epoll, HTTP, SQLite, OpenSSL)
         ↓
 Linux kernel
 </code></pre>
-
 <p>The <a href="machine.html">machine backend</a> bypasses C codegen for small programs and emits ELF directly.</p>
-
 <h2>Comparison</h2>
-
 <table>
 <tr><th></th><th>CForge</th><th>C</th><th>Rust</th></tr>
-<table>
-<tr><th>Control</th><th>High</th><th>High</th><th>High</th></tr>
-<table>
-<tr><th>Hidden runtime</th><th>None required</th><th>None</th><th>Minimal</th></tr>
-<table>
-<tr><th>Memory safety</th><th>Programmer + optional modes</th><th>Programmer</th><th>Compiler</th></tr>
-<table>
-<tr><th>Backend in 0.1</th><th>C + partial native</th><th>Native</th><th>Native</th></tr>
-
+<tr><td>Control</td><td>High</td><td>High</td><td>High</td></tr>
+<tr><td>Hidden runtime</td><td>None required</td><td>None</td><td>Minimal</td></tr>
+<tr><td>Memory safety</td><td>Programmer + optional modes</td><td>Programmer</td><td>Compiler</td></tr>
+<tr><td>Backend in 0.1</td><td>C + partial native</td><td>Native</td><td>Native</td></tr>
+</table>
 <h2>Next steps</h2>
-
 <p><a href="install.html">Install CForge</a> and write your <a href="first-program.html">first program</a>.</p>
 <footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
 </main>

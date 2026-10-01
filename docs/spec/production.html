@@ -43,48 +43,32 @@
 </ul></section>
 </nav>
 <main><h1>Production deployment, performance, and architecture comparison</h1>
-
-<p>Operating CForge services in production requires aligning the **0.1 reference binary** with broader ecosystem goals: graceful lifecycle, observable SLOs, capacity planning, and choosing among three server architectures. This document is the operations-facing capstone of the spec series.</p>
-
+<p>Operating CForge services in production requires aligning the <strong>0.1 reference binary</strong> with broader ecosystem goals: graceful lifecycle, observable SLOs, capacity planning, and choosing among three server architectures. This document is the operations-facing capstone of the spec series.</p>
 <h2>Reference deployment (0.1)</h2>
-
 <p>Typical layout:</p>
-
 <pre><code>
 systemd user unit → build/cforge-users
   → bind 127.0.0.1:8080 (HTTP), :8443 (TLS)
   → SQLite file on persistent volume
   → PEM cert/key from deploy/ (self-signed for dev)
 </code></pre>
-
 <p>Example unit fields:</p>
-
 <ul>
 <li><code>ExecStart</code> absolute path to binary</li>
-<ul>
 <li><code>WorkingDirectory</code> repo root for relative DB default</li>
-<ul>
 <li><code>Environment=PORT</code>, <code>TLS_PORT</code>, <code>CFORGE_BIND</code>, <code>CFORGE_DB</code>, TLS paths</li>
-<ul>
 <li><code>Restart=on-failure</code> — clean SIGTERM exit 0 does not restart</li>
-
+</ul>
 <p><code>./cforge deploy</code> writes and enables the user unit, generates certs if missing, waits until <code>GET /health</code> returns <code>ok</code>.</p>
-
-<p>**Production hardening beyond 0.1:**</p>
-
+<p><strong>Production hardening beyond 0.1:</strong></p>
 <ul>
 <li>Terminate TLS at reverse proxy (nginx, Caddy) with real CA certs</li>
-<ul>
 <li>Run behind private network; expose only proxy</li>
-<ul>
 <li>Separate DB to managed PostgreSQL per <a href="database.html">database.html</a></li>
-<ul>
 <li>Centralize logs and metrics per <a href="libraries.html">libraries.html</a></li>
-
+</ul>
 <h2>Graceful shutdown</h2>
-
-<p>**Shipped behavior** on <code>SIGTERM</code> / <code>SIGINT</code>:</p>
-
+<p><strong>Shipped behavior</strong> on <code>SIGTERM</code> / <code>SIGINT</code>:</p>
 <pre><code>
 eventfd wakes epoll_wait
   → close listen sockets (port reusable)
@@ -92,85 +76,53 @@ eventfd wakes epoll_wait
   → mark active connections close-after-response
   → when active_connections == 0, free slabs, finalize SQLite, exit 0
 </code></pre>
-
 <p>Kubernetes: <code>terminationGracePeriodSeconds</code> must exceed worst-case in-flight request time plus client slow-read. PreStop hook can sleep briefly after deregistering from load balancer.</p>
-
 <h2>Performance model</h2>
-
 <h3>Steady-state cost per request (Model A)</h3>
-
 <p>Dominant terms:</p>
-
 <p>1. TLS decrypt (if used) — OpenSSL constant overhead</p>
 <p>2. HTTP parse — linear in header + body size, bounded</p>
 <p>3. Handler — JSON parse + SQLite bind/step (blocking)</p>
 <p>4. Response encode + encrypt + write</p>
-
 <p>No per-request heap allocation; arena bump is O(bytes allocated in handler).</p>
-
 <h3>Capacity variables</h3>
-
 <table>
 <tr><th>Variable</th><th>Effect</th></tr>
-<table>
-<tr><th>`CFORGE_MAX_CONNS`</th><th>Max parallel clients</th></tr>
-<table>
-<tr><th>Handler DB latency</th><th>Directly adds to event-loop stall (Model A)</th></tr>
-<table>
-<tr><th>Keep-alive</th><th>Amortizes TLS handshake; increases slot occupancy</th></tr>
-<table>
-<tr><th>`accept_paused`</th><th>Signals saturation; clients see SYN backlog delay</th></tr>
-
+<tr><td><code>CFORGE_MAX_CONNS</code></td><td>Max parallel clients</td></tr>
+<tr><td>Handler DB latency</td><td>Directly adds to event-loop stall (Model A)</td></tr>
+<tr><td>Keep-alive</td><td>Amortizes TLS handshake; increases slot occupancy</td></tr>
+<tr><td><code>accept_paused</code></td><td>Signals saturation; clients see SYN backlog delay</td></tr>
+</table>
 <p>Rough planning: if mean handler time is <code>T</code> ms and one thread, sustainable RPS ≈ <code>1000 / T</code> for CPU-bound handlers ignoring I/O overlap. I/O overlap improves effective RPS until SQLite or handler blocks.</p>
-
 <h3>Tail latency</h3>
-
-<p>Model A suffers **head-of-line blocking** behind slow SQLite or large bodies. Model B isolates blocking to workers at cost of queue depth and memory. See <a href="http-async.html">http-async.html</a>.</p>
-
+<p>Model A suffers <strong>head-of-line blocking</strong> behind slow SQLite or large bodies. Model B isolates blocking to workers at cost of queue depth and memory. See <a href="http-async.html">http-async.html</a>.</p>
 <h3>Zero-copy and proxy mode (planned)</h3>
-
 <p>Edge proxy terminates TLS and speaks HTTP/1.1 or h2 to backend over loopback—reduces crypto load on CForge process. Static assets served via <code>sendfile</code> from proxy, not app binary.</p>
-
 <h2>Three architectures comparison</h2>
-
 <p>The ecosystem contemplates three deployment shapes:</p>
-
 <h3>Architecture 1 — Monolithic sync reactor (0.1)</h3>
-
 <pre><code>
 [ Clients ] → [ cforge-users: epoll + TLS + HTTP + SQLite ]
 </code></pre>
-
 <table>
 <tr><th>Strength</th><th>Weakness</th></tr>
-<table>
-<tr><th>Simple deploy, low memory</th><th>Single-core CPU ceiling</th></tr>
-<table>
-<tr><th>Predictable lifetimes</th><th>Blocking DB hurts all clients</th></tr>
-<table>
-<tr><th>Easy local dev</th><th>Not ideal for high QPS</th></tr>
-
+<tr><td>Simple deploy, low memory</td><td>Single-core CPU ceiling</td></tr>
+<tr><td>Predictable lifetimes</td><td>Blocking DB hurts all clients</td></tr>
+<tr><td>Easy local dev</td><td>Not ideal for high QPS</td></tr>
+</table>
 <p>Best for: edge APIs on small VMs, development, embedded admin ports.</p>
-
 <h3>Architecture 2 — Monolith + worker pool (planned Model B)</h3>
-
 <pre><code>
 [ Clients ] → [ reactor ] → queue → [ workers + PG pool ]
 </code></pre>
-
 <table>
 <tr><th>Strength</th><th>Weakness</th></tr>
-<table>
-<tr><th>Uses multiple cores</th><th>Continuation + queue complexity</th></tr>
-<table>
-<tr><th>Hides DB latency</th><th>Harder debug, more memory</th></tr>
-<table>
-<tr><th>Same binary artifact</th><th>Requires careful Slice rules</th></tr>
-
+<tr><td>Uses multiple cores</td><td>Continuation + queue complexity</td></tr>
+<tr><td>Hides DB latency</td><td>Harder debug, more memory</td></tr>
+<tr><td>Same binary artifact</td><td>Requires careful Slice rules</td></tr>
+</table>
 <p>Best for: OLTP APIs with 10–50 ms DB calls, moderate concurrency.</p>
-
 <h3>Architecture 3 — Microservices + bus (planned)</h3>
-
 <pre><code>
 [ Clients ] → [ API gateway ]
                  ↓           ↓
@@ -180,104 +132,65 @@ eventfd wakes epoll_wait
                  ↓
            [ PostgreSQL ]
 </code></pre>
-
 <table>
 <tr><th>Strength</th><th>Weakness</th></tr>
-<table>
-<tr><th>Independent scale and deploy</th><th>Network partitions, distributed tracing required</th></tr>
-<table>
-<tr><th>Technology mix per service</th><th>Operational overhead</th></tr>
-<table>
-<tr><th>Clear blast radius</th><th>Eventual consistency</th></tr>
-
+<tr><td>Independent scale and deploy</td><td>Network partitions, distributed tracing required</td></tr>
+<tr><td>Technology mix per service</td><td>Operational overhead</td></tr>
+<tr><td>Clear blast radius</td><td>Eventual consistency</td></tr>
+</table>
 <p>Best for: teams, multi-tenant SaaS, search/analytics sidecars.</p>
-
 <h3>Decision matrix</h3>
-
 <table>
 <tr><th>Criterion</th><th>Arch 1</th><th>Arch 2</th><th>Arch 3</th></tr>
-<table>
-<tr><th>Time to first deploy</th><th>★★★</th><th>★★</th><th>★</th></tr>
-<table>
-<tr><th>Peak RPS on one host</th><th>★</th><th>★★★</th><th>★★ (aggregate)</th></tr>
-<table>
-<tr><th>Operational cost</th><th>★★★</th><th>★★</th><th>★</th></tr>
-<table>
-<tr><th>Data consistency</th><th>Strong local</th><th>Strong with one DB</th><th>Eventual across services</th></tr>
-
+<tr><td>Time to first deploy</td><td>★★★</td><td>★★</td><td>★</td></tr>
+<tr><td>Peak RPS on one host</td><td>★</td><td>★★★</td><td>★★ (aggregate)</td></tr>
+<tr><td>Operational cost</td><td>★★★</td><td>★★</td><td>★</td></tr>
+<tr><td>Data consistency</td><td>Strong local</td><td>Strong with one DB</td><td>Eventual across services</td></tr>
+</table>
 <p>Migrate 1 → 2 by enabling worker pool in same binary. Migrate 2 → 3 by extracting read models and async consumers without changing handler source if outbox pattern is used from day one.</p>
-
 <h2>SLO suggestions</h2>
-
 <p>Example targets for a users API behind Arch 1 on loopback:</p>
-
 <table>
 <tr><th>SLO</th><th>Target</th><th>Measurement</th></tr>
-<table>
-<tr><th>Availability</th><th>99.9%</th><th>`/health` probe</th></tr>
-<table>
-<tr><th>p99 latency</th><th>&lt; 50 ms</th><th>Prometheus histogram</th></tr>
-<table>
-<tr><th>Error rate</th><th>&lt; 0.1% 5xx</th><th>`db_errors` + 5xx counter</th></tr>
-
+<tr><td>Availability</td><td>99.9%</td><td><code>/health</code> probe</td></tr>
+<tr><td>p99 latency</td><td>&lt; 50 ms</td><td>Prometheus histogram</td></tr>
+<tr><td>Error rate</td><td>&lt; 0.1% 5xx</td><td><code>db_errors</code> + 5xx counter</td></tr>
+</table>
 <p>Saturation alert: <code>accept_paused == 1</code> for &gt; 30 s.</p>
-
 <h2>Horizontal scaling</h2>
-
-<p>**0.1 SQLite** does not multi-write across instances. Production path:</p>
-
+<p><strong>0.1 SQLite</strong> does not multi-write across instances. Production path:</p>
 <ul>
 <li>Move to PostgreSQL</li>
-<ul>
 <li>Stateless app replicas behind L4/L7 load balancer</li>
-<ul>
 <li>Sticky sessions only if required; prefer stateless JWT</li>
-
+</ul>
 <p>Session affinity not required for REST JSON API.</p>
-
 <h2>Backup and disaster recovery</h2>
-
 <ul>
 <li>SQLite file: snapshot when stopped or use replication to server DB</li>
-<ul>
 <li>PostgreSQL: managed backups, test restore quarterly</li>
-<ul>
 <li>Config and secrets: infra-as-code, not only in unit files</li>
-
+</ul>
 <h2>FFI at production boundary</h2>
-
 <p>Services may call Rust/Zig crypto or Go policy engines via C ABI plugins. Require:</p>
-
 <ul>
 <li>Versioned plugin API</li>
-<ul>
 <li>Timeout on plugin calls in worker threads</li>
-<ul>
 <li>Fail closed on plugin crash (disable route, alert)</li>
-
+</ul>
 <p>Details in <a href="boundary.html">boundary.html</a>.</p>
-
 <h2>Compliance and audit</h2>
-
 <p>Log admin mutations with actor id when auth ships. Retain audit outbox immutably. GDPR delete propagates via <code>DELETE</code> handler plus cache invalidation and search indexer consumer.</p>
-
 <h2>Upgrade strategy</h2>
-
 <p>Rolling restart with multiple Arch 2/3 instances behind health-checked load balancer. Run <code>cforge migrate</code> once before rolling app deploy. Blue/green: deploy new binary to alternate unit, swap proxy upstream after health pass.</p>
-
 <h2>What 0.1 proves in production</h2>
-
 <p>The users service validates:</p>
-
 <ul>
 <li>Epoll accept pause under load</li>
-<ul>
 <li>TLS 1.3 alongside HTTP</li>
-<ul>
 <li>Arena-safe JSON + SQLite path</li>
-<ul>
 <li>systemd lifecycle and integration tests</li>
-
+</ul>
 <p>It is not yet a template for multi-region HA without the planned database and queue layers. See <a href="index.html">index.html</a> for the full spec map; operational detail also appears in the project END-TO-END guide and <a href="../status.html">implementation status</a>.</p>
 <footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
 </main>

@@ -43,132 +43,80 @@
 </ul></section>
 </nav>
 <main><h1>Language and runtime boundary</h1>
-
-<p>The CForge backend ecosystem depends on a **hard boundary** between what the <code>.cforge</code> compiler understands and what the linked runtime provides. This separation keeps the language small, makes the runtime replaceable, and allows the same handler source to target generated C or (eventually) native code with identical ABI symbols.</p>
-
+<p>The CForge backend ecosystem depends on a <strong>hard boundary</strong> between what the <code>.cforge</code> compiler understands and what the linked runtime provides. This separation keeps the language small, makes the runtime replaceable, and allows the same handler source to target generated C or (eventually) native code with identical ABI symbols.</p>
 <h2>What the language owns</h2>
-
-<p>**Shipped (0.1):** The <code>cforge</code> driver lexes and parses a statement-oriented subset: functions, <code>let</code>, <code>if</code>/<code>while</code>, <code>return</code>, and calls. Types map directly to C11 scalars and two runtime-visible structs:</p>
-
+<p><strong>Shipped (0.1):</strong> The <code>cforge</code> driver lexes and parses a statement-oriented subset: functions, <code>let</code>, <code>if</code>/<code>while</code>, <code>return</code>, and calls. Types map directly to C11 scalars and two runtime-visible structs:</p>
 <table>
 <tr><th>CForge type</th><th>ABI shape</th></tr>
-<table>
-<tr><th>`i32`, `u32`, `i64`, `u64`, `u16`, `u8`, `bool`</th><th>Fixed-width integers / `int32_t` for `bool`</th></tr>
-<table>
-<tr><th>`Slice`</th><th>`{ uint8_t *ptr; size_t len; }`</th></tr>
-<table>
-<tr><th>`*Ctx`</th><th>Opaque request context</th></tr>
-<table>
-<tr><th>`*u64`, `*u32`, `*Slice`</th><th>Out-parameters and mutable views</th></tr>
-
-<p><code>Slice</code> is a **non-owning view**. Copying a <code>Slice</code> copies pointer and length only. String literals become static <code>Slice</code> values pointing at read-only bytes. Handlers must not retain <code>Slice</code> pointers past the request unless documentation guarantees a longer lifetime (database helpers copy into the request arena for this reason).</p>
-
+<tr><td><code>i32</code>, <code>u32</code>, <code>i64</code>, <code>u64</code>, <code>u16</code>, <code>u8</code>, <code>bool</code></td><td>Fixed-width integers / <code>int32_t</code> for <code>bool</code></td></tr>
+<tr><td><code>Slice</code></td><td><code>{ uint8_t *ptr; size_t len; }</code></td></tr>
+<tr><td><code>*Ctx</code></td><td>Opaque request context</td></tr>
+<tr><td><code>*u64</code>, <code>*u32</code>, <code>*Slice</code></td><td>Out-parameters and mutable views</td></tr>
+</table>
+<p><code>Slice</code> is a <strong>non-owning view</strong>. Copying a <code>Slice</code> copies pointer and length only. String literals become static <code>Slice</code> values pointing at read-only bytes. Handlers must not retain <code>Slice</code> pointers past the request unless documentation guarantees a longer lifetime (database helpers copy into the request arena for this reason).</p>
 <p>The entry <code>main</code> lowers to <code>cforge_main</code>; the generated translation unit adds a C <code>main</code> that registers routes and calls <code>app_listen</code>. Application functions are <code>static</code> in the generated file and passed as <code>CForgeFn</code> pointers.</p>
-
-<p>**Planned:** <code>struct</code> declarations at module scope, generics for containers, <code>async fn</code> with state-machine lowering, and comptime validation of route tables. None of these change the rule that **syscalls and protocol parsing stay out of the language**.</p>
-
+<p><strong>Planned:</strong> <code>struct</code> declarations at module scope, generics for containers, <code>async fn</code> with state-machine lowering, and comptime validation of route tables. None of these change the rule that <strong>syscalls and protocol parsing stay out of the language</strong>.</p>
 <h2>What the runtime owns</h2>
-
 <p>Everything that touches the outside world:</p>
-
 <ul>
 <li>Socket creation, <code>bind</code>, <code>listen</code>, <code>accept4</code>, non-blocking mode, <code>TCP_NODELAY</code>, keep-alive</li>
-<ul>
 <li><code>epoll_wait</code> loop, connection slot table, idle scanning, accept pause under load</li>
-<ul>
 <li>HTTP request parsing, response framing, status codes, <code>Allow</code> headers</li>
-<ul>
 <li>TLS 1.3 handshake and record I/O via OpenSSL</li>
-<ul>
 <li>JSON parsers and response encoders scoped to known schemas</li>
-<ul>
 <li>SQLite connection, prepared statements, WAL pragmas, busy timeout</li>
-<ul>
 <li>Environment-based configuration (<code>PORT</code>, <code>CFORGE_DB</code>, TLS paths, limits)</li>
-<ul>
 <li>Process signals, graceful shutdown, stderr logging</li>
-
-<p>Application code chooses **which routes exist** and **which status codes and DB calls** to make. It does not choose buffer sizes, epoll user-data encoding, or SSL context flags.</p>
-
+</ul>
+<p>Application code chooses <strong>which routes exist</strong> and <strong>which status codes and DB calls</strong> to make. It does not choose buffer sizes, epoll user-data encoding, or SSL context flags.</p>
 <h2>The `Ctx` contract</h2>
-
 <p><code>Ctx</code> is stack-allocated per request inside the runtime. Handlers receive <code>*Ctx</code> only. Fields visible through API functions include:</p>
-
 <ul>
 <li>HTTP method and path as <code>Slice</code> (path without query string for routing)</li>
-<ul>
 <li>Request body as <code>Slice</code> (bounded by <code>CFORGE_MAX_BODY</code>)</li>
-<ul>
 <li>Output buffer cursor managed by <code>ctx_text</code>, <code>ctx_json_*</code>, <code>ctx_status</code></li>
-<ul>
 <li>Up to four captured path parameters (<code>:id</code> style), parsed via <code>ctx_param_u64</code></li>
-
-<p>Handlers must not store <code>Ctx</code> pointers beyond the synchronous return of <code>CForgeFn</code>. **Planned** async models may extend <code>Ctx</code> with a generation token or arena id so resumed tasks cannot write into recycled slots.</p>
-
+</ul>
+<p>Handlers must not store <code>Ctx</code> pointers beyond the synchronous return of <code>CForgeFn</code>. <strong>Planned</strong> async models may extend <code>Ctx</code> with a generation token or arena id so resumed tasks cannot write into recycled slots.</p>
 <h2>Error and control-flow policy</h2>
-
 <p>There is no exception unwinding. Functions return <code>int32_t</code>:</p>
-
 <table>
 <tr><th>Pattern</th><th>Meaning</th></tr>
-<table>
-<tr><th>`0`</th><th>Success</th></tr>
-<table>
-<tr><th>`1`</th><th>Expected domain miss (e.g. row not found)</th></tr>
-<table>
-<tr><th>`-1`</th><th>Parse failure, I/O error, constraint violation</th></tr>
-
+<tr><td><code>0</code></td><td>Success</td></tr>
+<tr><td><code>1</code></td><td>Expected domain miss (e.g. row not found)</td></tr>
+<tr><td><code>-1</code></td><td>Parse failure, I/O error, constraint violation</td></tr>
+</table>
 <p>HTTP mapping is application responsibility: <code>404</code> for missing users, <code>400</code> for bad JSON, <code>503</code> when <code>db_*</code> returns <code>-1</code>. The runtime may emit its own <code>400</code>/<code>413</code>/<code>431</code> before a handler runs when HTTP is malformed.</p>
-
 <p>This policy keeps generated C simple and makes FFI predictable: every exported runtime function uses the same width and sign convention.</p>
-
 <h2>Route registration ABI</h2>
-
 <p>Before <code>app_listen</code>, the generated <code>cforge_main</code> calls:</p>
-
 <pre><code>
 app_get(path_slice, handler_fn);
 app_post(path_slice, handler_fn);
 app_delete(path_slice, handler_fn);
 </code></pre>
-
-<p>Paths are copied at registration time (malloc at startup only). Lookup at request time is linear scan with exact match or single trailing <code>:param</code> segment—**Shipped (0.1)**. **Planned:** radix tree or perfect hash for large tables, method bitmaps per path, middleware chains stored as function pointer arrays.</p>
-
+<p>Paths are copied at registration time (malloc at startup only). Lookup at request time is linear scan with exact match or single trailing <code>:param</code> segment—<strong>Shipped (0.1)</strong>. <strong>Planned:</strong> radix tree or perfect hash for large tables, method bitmaps per path, middleware chains stored as function pointer arrays.</p>
 <p>Handlers have type <code>int32_t (*)(Ctx *)</code>. The runtime never calls back into the language except through this pointer.</p>
-
 <h2>FFI: C runtime and foreign libraries</h2>
-
-<p>**Today:** Generated C includes <code>cforge_rt.h</code> and links <code>server.c</code>, <code>json.c</code>, <code>db.c</code> with <code>libsqlite3</code>, <code>libssl</code>, <code>libcrypto</code>, <code>pthread</code>. New runtime capabilities are added as C functions and whitelisted in the compiler’s builtin call table.</p>
-
-<p>**Planned FFI layers:**</p>
-
-<p>1. **Stable C ABI** — <code>CFORGE_API</code> functions documented in reference; versioned struct sizes for <code>Ctx</code> extensions.</p>
-<p>2. **Dynamic plugins** — <code>.so</code> loaded at startup registering routes or background jobs (explicit opt-in; no runtime <code>dlopen</code> in 0.1).</p>
-<p>3. **Foreign DB/cache clients** — PostgreSQL libpq or custom wire codec in C++; handlers still see <code>db_*</code>-style integers.</p>
-<p>4. **Rust or Zig shims** — thin wrappers exporting <code>extern &quot;C&quot;</code> symbols matching <code>CForgeFn</code> and allocator rules.</p>
-
-<p>FFI code must respect **arena lifetimes**: any <code>Slice</code> handed to a handler must either point at static data, connection <code>in[]</code>, or the request arena until reset.</p>
-
+<p><strong>Today:</strong> Generated C includes <code>cforge_rt.h</code> and links <code>server.c</code>, <code>json.c</code>, <code>db.c</code> with <code>libsqlite3</code>, <code>libssl</code>, <code>libcrypto</code>, <code>pthread</code>. New runtime capabilities are added as C functions and whitelisted in the compiler’s builtin call table.</p>
+<p><strong>Planned FFI layers:</strong></p>
+<p>1. <strong>Stable C ABI</strong> — <code>CFORGE_API</code> functions documented in reference; versioned struct sizes for <code>Ctx</code> extensions.</p>
+<p>2. <strong>Dynamic plugins</strong> — <code>.so</code> loaded at startup registering routes or background jobs (explicit opt-in; no runtime <code>dlopen</code> in 0.1).</p>
+<p>3. <strong>Foreign DB/cache clients</strong> — PostgreSQL libpq or custom wire codec in C++; handlers still see <code>db_*</code>-style integers.</p>
+<p>4. <strong>Rust or Zig shims</strong> — thin wrappers exporting <code>extern &quot;C&quot;</code> symbols matching <code>CForgeFn</code> and allocator rules.</p>
+<p>FFI code must respect <strong>arena lifetimes</strong>: any <code>Slice</code> handed to a handler must either point at static data, connection <code>in[]</code>, or the request arena until reset.</p>
 <h2>Machine backend boundary</h2>
-
 <p>The <a href="../learn/machine.html">machine backend</a> compiles a different subset to x86-64 ELF without linking the HTTP runtime. Registers <code>r0</code>–<code>r7</code> map to System V argument registers. Syscalls are explicit. There is no <code>Ctx</code> or <code>app_listen</code> on this path—it proves the front-end can target non-C ABIs.</p>
-
 <p>Long-term, shared middle-end IR would feed both C codegen and machine codegen; handlers for microservices remain on the C server path until the IR backend can link a minimal runtime.</p>
-
 <h2>Anti-patterns at the boundary</h2>
-
 <ul>
 <li>Parsing HTTP or SQL in <code>.cforge</code> — duplicates runtime, breaks size limits.</li>
-<ul>
 <li>Calling <code>malloc</code> from handlers — violates allocation invariants; use runtime helpers that draw from the arena.</li>
-<ul>
 <li>Holding <code>Slice</code> from <code>db_get_user</code> after return — use-before-free when the arena resets.</li>
-<ul>
-<li>Blocking syscalls in handlers — stalls the single-threaded epoll loop in 0.1; **planned** worker pool offloads such calls.</li>
-
+<li>Blocking syscalls in handlers — stalls the single-threaded epoll loop in 0.1; <strong>planned</strong> worker pool offloads such calls.</li>
+</ul>
 <h2>Summary</h2>
-
-<p>The boundary is intentional: **express policy in CForge, express mechanism in C**. Extending the ecosystem means growing <code>cforge_rt.h</code> and keeping the language dumb about wire formats. See <a href="http-async.html">http-async.html</a> for protocol layer detail and <a href="memory.html">memory.html</a> for ownership rules.</p>
+<p>The boundary is intentional: <strong>express policy in CForge, express mechanism in C</strong>. Extending the ecosystem means growing <code>cforge_rt.h</code> and keeping the language dumb about wire formats. See <a href="http-async.html">http-async.html</a> for protocol layer detail and <a href="memory.html">memory.html</a> for ownership rules.</p>
 <footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
 </main>
 </div>

@@ -43,30 +43,19 @@
 </ul></section>
 </nav>
 <main><h1>CForge backend ecosystem specification</h1>
-
-<p>This document set describes the **full CForge backend ecosystem design**: how application code, the language compiler, the C runtime, optional native machine code, and Linux facilities fit together to build network services. It is normative for **intent** and descriptive for **release 0.1**, which implements a thin vertical slice (HTTP/1.1, SQLite, TLS 1.3, single-threaded epoll) documented in the repository’s end-to-end guide.</p>
-
+<p>This document set describes the <strong>full CForge backend ecosystem design</strong>: how application code, the language compiler, the C runtime, optional native machine code, and Linux facilities fit together to build network services. It is normative for <strong>intent</strong> and descriptive for <strong>release 0.1</strong>, which implements a thin vertical slice (HTTP/1.1, SQLite, TLS 1.3, single-threaded epoll) documented in the repository’s end-to-end guide.</p>
 <p>The specification is organized by concern, not by source file. Cross-cutting themes—explicit memory, integer error codes, library-not-language features, and predictable syscall budgets—appear in every layer.</p>
-
 <h2>Architectural stance</h2>
-
-<p>CForge targets **low-latency, allocation-bounded request paths** on Linux. The language expresses control flow and calls into a **stable runtime ABI** (<code>Slice</code>, <code>Ctx</code>, route registration, database helpers). The runtime owns syscalls, protocol state machines, buffer pools, and cryptographic primitives. There is no mandatory garbage collector and no hidden thread pool on the hot path in the reference server architecture.</p>
-
+<p>CForge targets <strong>low-latency, allocation-bounded request paths</strong> on Linux. The language expresses control flow and calls into a <strong>stable runtime ABI</strong> (<code>Slice</code>, <code>Ctx</code>, route registration, database helpers). The runtime owns syscalls, protocol state machines, buffer pools, and cryptographic primitives. There is no mandatory garbage collector and no hidden thread pool on the hot path in the reference server architecture.</p>
 <p>Three compile-time backends coexist in the long-term design:</p>
-
 <table>
 <tr><th>Backend</th><th>Role</th><th>Typical artifact</th></tr>
-<table>
-<tr><th>**C server**</th><th>Fast iteration, full runtime link</th><th>`build/cforge-users` via generated C11</th></tr>
-<table>
-<tr><th>**Native machine**</th><th>Syscalls, tight loops, teaching</th><th>x86-64 ELF from `cforge_mach.py`</th></tr>
-<table>
-<tr><th>**Future IR**</th><th>Shared optimizations, cross-target</th><th>SSA-like IR lowering to C or machine</th></tr>
-
+<tr><td><strong>C server</strong></td><td>Fast iteration, full runtime link</td><td><code>build/cforge-users</code> via generated C11</td></tr>
+<tr><td><strong>Native machine</strong></td><td>Syscalls, tight loops, teaching</td><td>x86-64 ELF from <code>cforge_mach.py</code></td></tr>
+<tr><td><strong>Future IR</strong></td><td>Shared optimizations, cross-target</td><td>SSA-like IR lowering to C or machine</td></tr>
+</table>
 <p>Release 0.1 ships the C server path and a partial machine path. The IR backend is roadmap only; see <a href="toolchain.html">toolchain.html</a>.</p>
-
 <h2>Layer diagram</h2>
-
 <pre><code>
 ┌─────────────────────────────────────────────────────────────┐
 │  Application (.cforge) — routes, validation, orchestration   │
@@ -88,59 +77,38 @@
 Optional sidecars (design): connection pool to PostgreSQL, Redis cache,
 message bus consumers — same process or worker pool; not in 0.1 binary.
 </code></pre>
-
-<p>Handlers never see file descriptors. The runtime passes **views** (<code>Slice</code>) into fixed per-connection storage. That boundary is the primary safety and performance contract; see <a href="boundary.html">boundary.html</a>.</p>
-
+<p>Handlers never see file descriptors. The runtime passes <strong>views</strong> (<code>Slice</code>) into fixed per-connection storage. That boundary is the primary safety and performance contract; see <a href="boundary.html">boundary.html</a>.</p>
 <h2>Request lifecycle (reference server)</h2>
-
 <p>A single client request on the 0.1 server traverses:</p>
-
 <pre><code>
 TCP accept (epoll) → optional TLS 1.3 → HTTP/1.1 parse → route match
   → handler (.cforge) → JSON/SQLite → response buffer → write/SSL_write
   → arena reset + DB statement release
 </code></pre>
-
 <p>Future designs add HTTP/2 streams, async I/O variants, and worker threads without changing the handler signature; work is scheduled before <code>CForgeFn</code> is invoked. Details live in <a href="http-async.html">http-async.html</a> and <a href="networking.html">networking.html</a>.</p>
-
 <h2>Specification map</h2>
-
 <table>
 <tr><th>Document</th><th>Topics</th></tr>
-<table>
-<tr><th>[boundary.html](boundary.html)</th><th>Language vs runtime, `Slice`/`Ctx`, error policy, FFI to C and native</th></tr>
-<table>
-<tr><th>[networking.html](networking.html)</th><th>TCP/UDP, epoll, backpressure, TLS transport, DNS hooks</th></tr>
-<table>
-<tr><th>[http-async.html](http-async.html)</th><th>HTTP versions, router, JSON/serialization, async model A vs B</th></tr>
-<table>
-<tr><th>[memory.html](memory.html)</th><th>Arenas, slabs, zero-copy rules, concurrency models</th></tr>
-<table>
-<tr><th>[database.html](database.html)</th><th>SQLite today, pool design, cache, message queues</th></tr>
-<table>
-<tr><th>[libraries.html](libraries.html)</th><th>Auth, config, logging, observability, packages</th></tr>
-<table>
-<tr><th>[toolchain.html](toolchain.html)</th><th>Build/test, security posture, compiler and IR roadmap</th></tr>
-<table>
-<tr><th>[production.html](production.html)</th><th>Deployment, SLO model, three architectures, operations</th></tr>
-
+<tr><td><a href="boundary.html">boundary.html</a></td><td>Language vs runtime, <code>Slice</code>/<code>Ctx</code>, error policy, FFI to C and native</td></tr>
+<tr><td><a href="networking.html">networking.html</a></td><td>TCP/UDP, epoll, backpressure, TLS transport, DNS hooks</td></tr>
+<tr><td><a href="http-async.html">http-async.html</a></td><td>HTTP versions, router, JSON/serialization, async model A vs B</td></tr>
+<tr><td><a href="memory.html">memory.html</a></td><td>Arenas, slabs, zero-copy rules, concurrency models</td></tr>
+<tr><td><a href="database.html">database.html</a></td><td>SQLite today, pool design, cache, message queues</td></tr>
+<tr><td><a href="libraries.html">libraries.html</a></td><td>Auth, config, logging, observability, packages</td></tr>
+<tr><td><a href="toolchain.html">toolchain.html</a></td><td>Build/test, security posture, compiler and IR roadmap</td></tr>
+<tr><td><a href="production.html">production.html</a></td><td>Deployment, SLO model, three architectures, operations</td></tr>
+</table>
 <h2>Design invariants</h2>
-
 <p>These rules apply across all planned backends unless a document explicitly carves an exception:</p>
-
-<p>1. **No allocation on the steady-state handler path** in the reference epoll server; bump arenas and pre-sized buffers only.</p>
-<p>2. **Integer return codes** instead of exceptions; <code>0</code> success, positive domain codes, <code>-1</code> for hard failures.</p>
-<p>3. **Library boundaries** — protocols and storage are runtime functions, not language keywords.</p>
-<p>4. **Bounded resources** — max connections, header/body sizes, route count, idle timeouts; overload degrades by pausing accept, not by unbounded fds.</p>
-<p>5. **Explicit shutdown** — signal → eventfd → drain in-flight → release slabs and DB handles.</p>
-
+<p>1. <strong>No allocation on the steady-state handler path</strong> in the reference epoll server; bump arenas and pre-sized buffers only.</p>
+<p>2. <strong>Integer return codes</strong> instead of exceptions; <code>0</code> success, positive domain codes, <code>-1</code> for hard failures.</p>
+<p>3. <strong>Library boundaries</strong> — protocols and storage are runtime functions, not language keywords.</p>
+<p>4. <strong>Bounded resources</strong> — max connections, header/body sizes, route count, idle timeouts; overload degrades by pausing accept, not by unbounded fds.</p>
+<p>5. <strong>Explicit shutdown</strong> — signal → eventfd → drain in-flight → release slabs and DB handles.</p>
 <h2>Relationship to other docs</h2>
-
-<p>The <a href="../learn/introduction.html">learn</a> track teaches CForge from a user perspective. <a href="../reference/runtime-api.html">Reference</a> lists the stable runtime surface. <a href="../status.html">Implementation status</a> marks what is shipped in 0.1 versus planned. This **spec** series is the systems design reference for contributors extending the runtime, adding protocols, or choosing between sync epoll and future async models.</p>
-
+<p>The <a href="../learn/introduction.html">learn</a> track teaches CForge from a user perspective. <a href="../reference/runtime-api.html">Reference</a> lists the stable runtime surface. <a href="../status.html">Implementation status</a> marks what is shipped in 0.1 versus planned. This <strong>spec</strong> series is the systems design reference for contributors extending the runtime, adding protocols, or choosing between sync epoll and future async models.</p>
 <h2>Versioning</h2>
-
-<p>Specification sections label **Shipped (0.1)** when behavior matches the users service binary, and **Planned** when describing ecosystem components (PostgreSQL wire client, HTTP/2, Kafka, JWT, multi-thread pool) that appear in design discussions but not in the current tree. When shipped and planned diverge, the planned text states the migration path from the 0.1 implementation.</p>
+<p>Specification sections label <strong>Shipped (0.1)</strong> when behavior matches the users service binary, and <strong>Planned</strong> when describing ecosystem components (PostgreSQL wire client, HTTP/2, Kafka, JWT, multi-thread pool) that appear in design discussions but not in the current tree. When shipped and planned diverge, the planned text states the migration path from the 0.1 implementation.</p>
 <footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
 </main>
 </div>

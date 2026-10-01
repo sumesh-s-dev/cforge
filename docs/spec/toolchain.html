@@ -43,34 +43,21 @@
 </ul></section>
 </nav>
 <main><h1>Toolchain, build, test, security, compiler and IR roadmap</h1>
-
-<p>The CForge **toolchain** is the <code>cforge</code> executable plus <code>cforge_mach.py</code> for native ELF. It orchestrates compile, link, integration test, deploy, and (eventually) package fetch and migration. This document covers commands, CI expectations, security posture, and the multi-year compiler roadmap.</p>
-
+<p>The CForge <strong>toolchain</strong> is the <code>cforge</code> executable plus <code>cforge_mach.py</code> for native ELF. It orchestrates compile, link, integration test, deploy, and (eventually) package fetch and migration. This document covers commands, CI expectations, security posture, and the multi-year compiler roadmap.</p>
 <h2>Commands (shipped)</h2>
-
 <table>
 <tr><th>Command</th><th>Behavior</th></tr>
-<table>
-<tr><th>`./cforge build`</th><th>Lex/parse entry → `build/*.gen.c` → `cc` runtime objects → binary</th></tr>
-<table>
-<tr><th>`./cforge run`</th><th>Build then exec binary in place</th></tr>
-<table>
-<tr><th>`./cforge test`</th><th>Build, ephemeral ports 18081/18443, 14+ HTTP/TLS checks, SIGTERM, machine tests</th></tr>
-<table>
-<tr><th>`./cforge deploy`</th><th>Build, write systemd user unit, enable/start, wait for `/health`</th></tr>
-<table>
-<tr><th>`./cforge status`</th><th>GET `/health` and `/metrics` on default port</th></tr>
-<table>
-<tr><th>`./cforge machine`</th><th>Emit x86-64 ELF via `cforge_mach.py`</th></tr>
-<table>
-<tr><th>`./cforge machine-test`</th><th>Run native add/expr samples</th></tr>
-
+<tr><td><code>./cforge build</code></td><td>Lex/parse entry → <code>build/*.gen.c</code> → <code>cc</code> runtime objects → binary</td></tr>
+<tr><td><code>./cforge run</code></td><td>Build then exec binary in place</td></tr>
+<tr><td><code>./cforge test</code></td><td>Build, ephemeral ports 18081/18443, 14+ HTTP/TLS checks, SIGTERM, machine tests</td></tr>
+<tr><td><code>./cforge deploy</code></td><td>Build, write systemd user unit, enable/start, wait for <code>/health</code></td></tr>
+<tr><td><code>./cforge status</code></td><td>GET <code>/health</code> and <code>/metrics</code> on default port</td></tr>
+<tr><td><code>./cforge machine</code></td><td>Emit x86-64 ELF via <code>cforge_mach.py</code></td></tr>
+<tr><td><code>./cforge machine-test</code></td><td>Run native add/expr samples</td></tr>
+</table>
 <p>Link line (conceptually): C11, <code>-O2 -g -Wall -Wextra -Werror</code>, <code>libsqlite3</code>, <code>libssl</code>, <code>libcrypto</code>, <code>pthread</code>.</p>
-
 <p><code>cforge.toml</code> selects package name and entry path only in 0.1.</p>
-
 <h2>Build graph</h2>
-
 <pre><code>
 app/users.cforge
     → lexer / parser (cforge)
@@ -82,65 +69,41 @@ mach/add.cforge
     → cforge_mach.py
     → build/mach-add (ELF)
 </code></pre>
-
-<p>**Planned:** <code>cforge build --release</code> strips symbols; <code>cforge build --target aarch64-unknown-linux-gnu</code> cross-compile via LLVM backend.</p>
-
+<p><strong>Planned:</strong> <code>cforge build --release</code> strips symbols; <code>cforge build --target aarch64-unknown-linux-gnu</code> cross-compile via LLVM backend.</p>
 <h2>Testing strategy</h2>
-
 <p>Layers:</p>
-
-<p>1. **Machine tests** — deterministic exit codes for arithmetic programs</p>
-<p>2. **Integration tests** — real TCP, TLS 1.3, pipelining, split writes, JSON edge cases</p>
-<p>3. **Unit tests (planned)** — C tests for HTTP parser vectors, JSON fuzz inputs</p>
-<p>4. **Property tests (planned)** — generate random valid HTTP requests within limits</p>
-
+<p>1. <strong>Machine tests</strong> — deterministic exit codes for arithmetic programs</p>
+<p>2. <strong>Integration tests</strong> — real TCP, TLS 1.3, pipelining, split writes, JSON edge cases</p>
+<p>3. <strong>Unit tests (planned)</strong> — C tests for HTTP parser vectors, JSON fuzz inputs</p>
+<p>4. <strong>Property tests (planned)</strong> — generate random valid HTTP requests within limits</p>
 <p>CI (GitHub Actions): Ubuntu, install gcc/SQLite/OpenSSL, run <code>./cforge test</code>. No committed TLS certs or production database.</p>
-
 <p>Local parity: tests use separate DB under <code>build/</code> to avoid touching <code>data/users.db</code>.</p>
-
 <h2>Documentation build</h2>
-
 <p><code>python3 docs/build_docs.py</code> walks <code>docs/content/**/*.md</code> and emits static HTML. Spec pages live under <code>docs/content/spec/</code> and publish alongside learn/reference when regenerated.</p>
-
 <h2>Security posture</h2>
-
 <h3>Supply chain</h3>
-
 <ul>
 <li>Pin compiler flags <code>-Werror</code> in CI</li>
-<ul>
 <li>Verify dependency hashes when package registry exists</li>
-<ul>
 <li>Reproducible builds: document compiler version in release notes</li>
-
+</ul>
 <h3>Runtime attack surface</h3>
-
 <ul>
 <li>Bind localhost by default; document risk of <code>0.0.0.0</code></li>
-<ul>
 <li>TLS 1.3 only; disable weak ciphers and renegotiation</li>
-<ul>
 <li>Request size limits enforced before handler</li>
-<ul>
 <li>No <code>eval</code>, no runtime <code>dlopen</code> in 0.1</li>
-<ul>
 <li>SQLite parameterized queries only</li>
-
+</ul>
 <h3>Secrets</h3>
-
 <ul>
 <li>PEM keys read from paths in environment, not argv</li>
-<ul>
-<li>**Planned:** secret files mode <code>0400</code>, refuse world-readable key paths</li>
-<ul>
+<li><strong>Planned:</strong> secret files mode <code>0400</code>, refuse world-readable key paths</li>
 <li>Never log bearer tokens or passwords</li>
-
+</ul>
 <h3>Dependency CVE process</h3>
-
-<p>Track OpenSSL and SQLite advisories; rebuild and redeploy on critical fixes. SBOM export **planned** as <code>cforge sbom</code>.</p>
-
+<p>Track OpenSSL and SQLite advisories; rebuild and redeploy on critical fixes. SBOM export <strong>planned</strong> as <code>cforge sbom</code>.</p>
 <h2>Compiler pipeline today</h2>
-
 <pre><code>
 Source (.cforge)
   → tokens
@@ -148,101 +111,67 @@ Source (.cforge)
   → C codegen (types, static functions, cforge_main)
   → host C compiler
 </code></pre>
-
 <p>Builtin calls are validated against a fixed list (<code>app_listen</code>, <code>db_*</code>, <code>ctx_*</code>, etc.). Unknown identifiers are compile errors.</p>
-
 <h2>IR roadmap (planned phases)</h2>
-
 <h3>Phase 1 — Typed AST + lint</h3>
-
 <ul>
 <li>Name resolution and type checking beyond syntax</li>
-<ul>
 <li>Dead code elimination on unreachable functions</li>
-<ul>
 <li>Route table validation at compile time (duplicate paths)</li>
-
+</ul>
 <h3>Phase 2 — SSA-like IR</h3>
-
 <pre><code>
 .cforge → AST → IR (instructions, basic blocks, phi for merges)
          → optimizations (const fold, inline small helpers)
          → C backend OR machine backend
 </code></pre>
-
 <p>Benefits: single place for <code>async fn</code> lowering, shared inlining, debug symbols mapping IR to source lines.</p>
-
 <h3>Phase 3 — Machine backend parity</h3>
-
 <ul>
 <li>Lower IR to x86-64 and aarch64</li>
-<ul>
 <li>ELF linking with minimal libc or none for freestanding</li>
-<ul>
 <li>Same calling convention as current <code>r0</code>–<code>r7</code> mapping where applicable</li>
-
+</ul>
 <h3>Phase 4 — Alternative backends</h3>
-
 <ul>
 <li>WASM for edge workers</li>
-<ul>
 <li>LLVM IR for vendor optimizers</li>
-
-<p>IR is **not** shipped in 0.1; <code>cforge_mach.py</code> remains a separate ad hoc lowering for teaching.</p>
-
+</ul>
+<p>IR is <strong>not</strong> shipped in 0.1; <code>cforge_mach.py</code> remains a separate ad hoc lowering for teaching.</p>
 <h2>FFI and codegen safety</h2>
-
 <p>Generated C must:</p>
-
 <ul>
 <li>Include <code>stdint.h</code> and <code>cforge_rt.h</code></li>
-<ul>
 <li>Not emit VLAs on handler path</li>
-<ul>
 <li>Map <code>bool</code> to <code>int32_t</code> consistently with runtime</li>
-
-<p>**Planned:** sanitizers build flag <code>cforge build --asan</code> for contributors.</p>
-
+</ul>
+<p><strong>Planned:</strong> sanitizers build flag <code>cforge build --asan</code> for contributors.</p>
 <h2>Formatter and linter (planned)</h2>
-
 <p><code>cforge fmt</code> — canonical indentation and brace style</p>
 <p><code>cforge lint</code> — warn on unreachable code, unused <code>let</code>, suspicious <code>Slice</code> escapes</p>
-
 <h2>Versioning</h2>
-
 <p>Semantic versioning for language breaking changes vs runtime ABI. Runtime functions gain new symbols without breaking existing binaries when using stable <code>Ctx</code> size or version negotiation at <code>app_listen</code>.</p>
-
 <h2>Release artifacts</h2>
-
 <ul>
 <li>Static binary tarball per arch</li>
-<ul>
 <li>systemd unit example under <code>deploy/</code></li>
-<ul>
-<li>**Planned:** OCI images with distroless base, read-only rootfs, non-root user</li>
-
+<li><strong>Planned:</strong> OCI images with distroless base, read-only rootfs, non-root user</li>
+</ul>
 <h2>Relation to spec siblings</h2>
-
 <ul>
 <li><a href="boundary.html">boundary.html</a> — what the compiler may call</li>
-<ul>
 <li><a href="production.html">production.html</a> — how built artifacts run at scale</li>
-<ul>
 <li><a href="libraries.html">libraries.html</a> — future package manifests</li>
-
+</ul>
 <h2>Machine backend reference</h2>
-
 <p><code>cforge_mach.py</code> parses register operations and small expressions, emits ELF with Linux syscall exit. It does not share the HTTP runtime. Roadmap merges front-end with server compiler via IR; until then, two entry commands remain intentional.</p>
-
 <h2>Contributor workflow</h2>
-
 <pre><code>
 edit .cforge or runtime/*.c
 ./cforge test
 python3 docs/build_docs.py   # if docs changed
 </code></pre>
-
-<p>Pre-commit hooks **planned** for fmt/lint/test on changed paths only.</p>
+<p>Pre-commit hooks <strong>planned</strong> for fmt/lint/test on changed paths only.</p>
 <footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
 </main>
 </div>

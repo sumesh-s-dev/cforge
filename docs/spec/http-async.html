@@ -43,178 +43,107 @@
 </ul></section>
 </nav>
 <main><h1>HTTP, routing, serialization, and async models</h1>
-
-<p>This document covers application-layer protocols in the CForge backend design: HTTP family semantics, the reference router, JSON and broader serialization, and two async architectures (**Model A** synchronous reactor vs **Model B** executor with continuations).</p>
-
+<p>This document covers application-layer protocols in the CForge backend design: HTTP family semantics, the reference router, JSON and broader serialization, and two async architectures (<strong>Model A</strong> synchronous reactor vs <strong>Model B</strong> executor with continuations).</p>
 <h2>HTTP/1.1 (shipped)</h2>
-
 <p>The 0.1 parser is a byte scanner over the connection <code>in[]</code> buffer. It supports:</p>
-
 <ul>
 <li>Methods: <code>GET</code>, <code>POST</code>, <code>DELETE</code></li>
-<ul>
 <li>Versions: <code>HTTP/1.0</code>, <code>HTTP/1.1</code></li>
-<ul>
 <li><code>Content-Length</code> bodies up to 65536 bytes</li>
-<ul>
 <li>Required <code>Host</code> on HTTP/1.1</li>
-<ul>
 <li><code>Connection: close</code> and HTTP/1.0 keep-alive negotiation</li>
-<ul>
 <li>Query strings stripped before route lookup (<code>/users/1?trace=1</code> → <code>/users/1</code>)</li>
-<ul>
 <li>Pipelined requests already present in the buffer</li>
-<ul>
 <li>One trailing path parameter (<code>/users/:id</code>)</li>
-
+</ul>
 <p>Rejected conditions map to explicit statuses: <code>400</code> bad line, <code>413</code> oversized body, <code>431</code> header limits, <code>501</code> chunked <code>Transfer-Encoding</code>, <code>417</code> <code>Expect</code>, <code>505</code> unknown HTTP version, <code>405</code> wrong method with <code>Allow</code>, <code>404</code> no route.</p>
-
 <p>Responses are assembled entirely in <code>out[]</code> before socket write: status line, <code>Content-Type</code>, <code>Content-Length</code>, <code>Connection</code>, <code>Server: cforge</code>, body. No chunked encoder in 0.1; <code>204</code> uses zero body length.</p>
-
 <p>Keep-alive defaults: HTTP/1.1 persistent unless <code>Connection: close</code>; HTTP/1.0 closes unless client requests keep-alive.</p>
-
 <h2>HTTP/2 and HTTP/3 (planned)</h2>
-
 <table>
 <tr><th>Feature</th><th>HTTP/2 plan</th><th>HTTP/3 plan</th></tr>
-<table>
-<tr><th>Multiplexing</th><th>Stream per request on one TCP conn</th><th>QUIC streams</th></tr>
-<table>
-<tr><th>Header compression</th><th>HPACK static/dynamic tables</th><th>QPACK</th></tr>
-<table>
-<tr><th>Server push</th><th>Disabled by default</th><th>N/A</th></tr>
-<table>
-<tr><th>Integration</th><th>ALPN `h2` after TLS</th><th>UDP listener + QUIC stack</th></tr>
-
+<tr><td>Multiplexing</td><td>Stream per request on one TCP conn</td><td>QUIC streams</td></tr>
+<tr><td>Header compression</td><td>HPACK static/dynamic tables</td><td>QPACK</td></tr>
+<tr><td>Server push</td><td>Disabled by default</td><td>N/A</td></tr>
+<tr><td>Integration</td><td>ALPN <code>h2</code> after TLS</td><td>UDP listener + QUIC stack</td></tr>
+</table>
 <p>Handlers remain <code>CForgeFn</code>; the runtime maps stream id → synthetic <code>Ctx</code> with per-stream arena slices carved from a connection-level pool. Flow control backpressure surfaces as “pause read on stream” rather than global accept pause.</p>
-
 <h2>Router</h2>
-
-<p>**Shipped (0.1):** Routes registered at startup via <code>app_get</code> / <code>app_post</code> / <code>app_delete</code>. Patterns stored as malloc’d strings once; lookup is O(routes) with:</p>
-
+<p><strong>Shipped (0.1):</strong> Routes registered at startup via <code>app_get</code> / <code>app_post</code> / <code>app_delete</code>. Patterns stored as malloc’d strings once; lookup is O(routes) with:</p>
 <ul>
 <li>Exact <code>memcmp</code> match on path length and bytes</li>
-<ul>
 <li>Optional single <code>:name</code> suffix matching one path segment without <code>/</code></li>
-
+</ul>
 <p><code>ctx_param_u64(ctx, 0, &amp;id)</code> parses decimal <code>u64</code>, rejecting empty, leading zeros, non-digits, overflow.</p>
-
 <p>First matching method wins. Path match with wrong method yields <code>405</code> and <code>Allow</code> listing methods registered for that path pattern.</p>
-
-<p>**Planned extensions:**</p>
-
+<p><strong>Planned extensions:</strong></p>
 <ul>
 <li>Middleware stack: <code>app_use(fn)</code> running before route handlers (auth, request id)</li>
-<ul>
 <li>Host-based virtual hosts and mount prefixes</li>
-<ul>
 <li>Static file route kind with <code>sendfile</code> zero-copy path</li>
-<ul>
 <li>OpenAPI-derived route table generation at compile time</li>
-
+</ul>
 <h2>JSON and serialization</h2>
-
-<p>**Shipped (0.1):** <code>json_parse_create</code> accepts one object with required keys <code>name</code> (string) and <code>age</code> (unsigned integer). Strictness: no duplicate keys, no unknown keys, no trailing commas, BMP-only <code>\uXXXX</code> escapes (no surrogate pairs), UTF-8 validation, max name 256 bytes into request arena.</p>
-
+<p><strong>Shipped (0.1):</strong> <code>json_parse_create</code> accepts one object with required keys <code>name</code> (string) and <code>age</code> (unsigned integer). Strictness: no duplicate keys, no unknown keys, no trailing commas, BMP-only <code>\uXXXX</code> escapes (no surrogate pairs), UTF-8 validation, max name 256 bytes into request arena.</p>
 <p>Response helpers <code>ctx_json_user</code>, <code>ctx_json_id</code> escape strings for JSON text in <code>out[]</code>.</p>
-
-<p>**Ecosystem serialization roadmap:**</p>
-
+<p><strong>Ecosystem serialization roadmap:</strong></p>
 <table>
 <tr><th>Format</th><th>Role</th><th>Handler exposure</th></tr>
-<table>
-<tr><th>JSON</th><th>REST APIs, config</th><th>`Slice` in/out via runtime</th></tr>
-<table>
-<tr><th>MessagePack</th><th>Compact RPC</th><th>`msgpack_decode_user(ctx, …)`</th></tr>
-<table>
-<tr><th>CBOR</th><th>IoT / COSE adjacency</th><th>Schema-id prefixed blobs</th></tr>
-<table>
-<tr><th>Protobuf</th><th>gRPC services</th><th>Generated C structs + arena views</th></tr>
-<table>
-<tr><th>Form urlencoded</th><th>HTML forms</th><th>Query parser sharing router utilities</th></tr>
-
-<p>Design rule: parsers are **schema-specific** in early releases to bound complexity; a general DOM JSON API is optional and lives off the hot path.</p>
-
+<tr><td>JSON</td><td>REST APIs, config</td><td><code>Slice</code> in/out via runtime</td></tr>
+<tr><td>MessagePack</td><td>Compact RPC</td><td><code>msgpack_decode_user(ctx, …)</code></td></tr>
+<tr><td>CBOR</td><td>IoT / COSE adjacency</td><td>Schema-id prefixed blobs</td></tr>
+<tr><td>Protobuf</td><td>gRPC services</td><td>Generated C structs + arena views</td></tr>
+<tr><td>Form urlencoded</td><td>HTML forms</td><td>Query parser sharing router utilities</td></tr>
+</table>
+<p>Design rule: parsers are <strong>schema-specific</strong> in early releases to bound complexity; a general DOM JSON API is optional and lives off the hot path.</p>
 <h2>Authentication and authorization (planned)</h2>
-
 <p>Not in 0.1. Intended layers:</p>
-
-<p>1. **Transport:** mTLS between services</p>
-<p>2. **Request:** <code>Authorization: Bearer</code> JWT validation (HMAC or Ed25519) in middleware</p>
-<p>3. **Session:** Signed cookie + server-side store in Redis</p>
-<p>4. **OAuth2:** External IdP; runtime stores only validated claims in <code>Ctx</code> extensions</p>
-
+<p>1. <strong>Transport:</strong> mTLS between services</p>
+<p>2. <strong>Request:</strong> <code>Authorization: Bearer</code> JWT validation (HMAC or Ed25519) in middleware</p>
+<p>3. <strong>Session:</strong> Signed cookie + server-side store in Redis</p>
+<p>4. <strong>OAuth2:</strong> External IdP; runtime stores only validated claims in <code>Ctx</code> extensions</p>
 <p>Password hashing (Argon2id) belongs in registration flows, never in handlers as raw string compare.</p>
-
 <h2>Async Model A — synchronous reactor (shipped)</h2>
-
 <pre><code>
 epoll_wait → read → parse → handler() → write → arena reset
 </code></pre>
-
 <p>Properties:</p>
-
 <ul>
 <li>Single thread, no locks on connection table</li>
-<ul>
 <li>Handler must return quickly; SQLite calls block the loop</li>
-<ul>
 <li>Predictable latency variance under low load</li>
-<ul>
 <li>Simple reasoning about <code>Slice</code> lifetimes</li>
-
+</ul>
 <p>This is the 0.1 users service model documented end-to-end in the repository.</p>
-
 <h2>Async Model B — executor and continuations (planned)</h2>
-
 <pre><code>
 epoll_wait → schedule IoTask → on complete resume Continuation → handler stages
 </code></pre>
-
 <p>Components:</p>
-
 <ul>
-<li>**Reactor thread(s)** — only socket/TLS/timer events</li>
-<ul>
-<li>**Worker pool** — CPU-bound or blocking DB/HTTP client work</li>
-<ul>
-<li>**Channels** — pass owned buffers between threads with refcount or arena transfer</li>
-<ul>
-<li>**<code>async fn</code>** — compiler lowers to struct state machine + function pointers</li>
-
-<p>Handler ABI evolution: <code>CForgeFn</code> returns <code>CFORGE_YIELD</code> to suspend; runtime stores stack frame in connection slot. **Constraint:** no <code>Slice</code> pointing at stack across yield unless copied to arena.</p>
-
+<li><strong>Reactor thread(s)</strong> — only socket/TLS/timer events</li>
+<li><strong>Worker pool</strong> — CPU-bound or blocking DB/HTTP client work</li>
+<li><strong>Channels</strong> — pass owned buffers between threads with refcount or arena transfer</li>
+<li><strong><code>async fn</code></strong> — compiler lowers to struct state machine + function pointers</li>
+</ul>
+<p>Handler ABI evolution: <code>CForgeFn</code> returns <code>CFORGE_YIELD</code> to suspend; runtime stores stack frame in connection slot. <strong>Constraint:</strong> no <code>Slice</code> pointing at stack across yield unless copied to arena.</p>
 <p>Comparison:</p>
-
 <table>
 <tr><th>Concern</th><th>Model A</th><th>Model B</th></tr>
-<table>
-<tr><th>Throughput on many cores</th><th>Limited</th><th>Scales with workers</th></tr>
-<table>
-<tr><th>Tail latency under blocking DB</th><th>Spikes</th><th>Isolated to workers</th></tr>
-<table>
-<tr><th>Memory</th><th>Fixed slots</th><th>Queues + continuation storage</th></tr>
-<table>
-<tr><th>Debugging</th><th>Linear</th><th>Harder ordering bugs</th></tr>
-
+<tr><td>Throughput on many cores</td><td>Limited</td><td>Scales with workers</td></tr>
+<tr><td>Tail latency under blocking DB</td><td>Spikes</td><td>Isolated to workers</td></tr>
+<tr><td>Memory</td><td>Fixed slots</td><td>Queues + continuation storage</td></tr>
+<tr><td>Debugging</td><td>Linear</td><td>Harder ordering bugs</td></tr>
+</table>
 <p>Hybrid deployments may run Model A on edge nodes and Model B behind internal load balancers.</p>
-
 <h2>WebSockets and SSE (planned)</h2>
-
 <p>WebSocket upgrade would share the HTTP parser’s header phase, then switch slot mode to frame codec. Server-Sent Events reuse HTTP/1.1 chunked responses with <code>text/event-stream</code>. Both stay out of language syntax; registration resembles <code>app_get</code> with a protocol flag.</p>
-
 <h2>Caching semantics at HTTP layer</h2>
-
-<p><code>ETag</code> / <code>If-None-Match</code> and <code>Cache-Control</code> for static assets are **planned**. Dynamic JSON APIs default to <code>Cache-Control: no-store</code> unless handlers set headers via future <code>ctx_header</code> API.</p>
-
+<p><code>ETag</code> / <code>If-None-Match</code> and <code>Cache-Control</code> for static assets are <strong>planned</strong>. Dynamic JSON APIs default to <code>Cache-Control: no-store</code> unless handlers set headers via future <code>ctx_header</code> API.</p>
 <h2>Error responses</h2>
-
-<p>Runtime-generated errors use fixed bodies or empty bodies per status. Application errors use <code>ctx_text</code> / <code>ctx_status</code>. **Planned:** Problem Details (<code>application/problem+json</code>) helper for consistent machine-readable errors.</p>
-
+<p>Runtime-generated errors use fixed bodies or empty bodies per status. Application errors use <code>ctx_text</code> / <code>ctx_status</code>. <strong>Planned:</strong> Problem Details (<code>application/problem+json</code>) helper for consistent machine-readable errors.</p>
 <h2>Testing implications</h2>
-
 <p>Integration tests in <code>./cforge test</code> cover pipelining, split header writes, TLS 1.3, and graceful <code>SIGTERM</code>. Async Model B will need stress tests for continuation leaks and ordered response writes on one connection.</p>
-
 <p>See <a href="networking.html">networking.html</a> for sockets and <a href="memory.html">memory.html</a> for buffer lifetimes during pipelining.</p>
 <footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
 </main>

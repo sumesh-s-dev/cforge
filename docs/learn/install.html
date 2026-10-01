@@ -43,61 +43,41 @@
 </ul></section>
 </nav>
 <main><h1>Installation</h1>
-
 <h2>Requirements</h2>
-
 <table>
 <tr><th>Component</th><th>Server path</th><th>Machine path</th></tr>
-<table>
-<tr><th>Python 3</th><th>yes (compiler driver)</th><th>yes</th></tr>
-<table>
-<tr><th>GCC or Clang</th><th>yes</th><th>no</th></tr>
-<table>
-<tr><th>pkg-config + libsqlite3</th><th>yes</th><th>no</th></tr>
-<table>
-<tr><th>OpenSSL dev libs</th><th>yes (TLS)</th><th>no</th></tr>
-<table>
-<tr><th>Linux x86-64</th><th>yes</th><th>yes</th></tr>
-
+<tr><td>Python 3</td><td>yes (compiler driver)</td><td>yes</td></tr>
+<tr><td>GCC or Clang</td><td>yes</td><td>no</td></tr>
+<tr><td>pkg-config + libsqlite3</td><td>yes</td><td>no</td></tr>
+<tr><td>OpenSSL dev libs</td><td>yes (TLS)</td><td>no</td></tr>
+<tr><td>Linux x86-64</td><td>yes</td><td>yes</td></tr>
+</table>
 <h2>Clone and verify</h2>
-
 <pre><code>
 git clone git@github.com:sumesh-s-dev/cforge.git
 cd cforge
 ./cforge test
 </code></pre>
-
 <p>You should see <code>ok 14 checks</code> and machine ELF tests.</p>
-
 <h2>Build the users service</h2>
-
 <pre><code>
 ./cforge build
 # → build/cforge-users
 </code></pre>
-
 <h2>Optional: systemd deploy (localhost)</h2>
-
 <pre><code>
 ./cforge deploy
 curl http://127.0.0.1:8080/health
 </code></pre>
-
 <p>TLS on <code>https://127.0.0.1:8443</code> uses self-signed certs under <code>deploy/</code> (created on first deploy).</p>
-
 <h2>Publish documentation locally</h2>
-
 <pre><code>
 python3 docs/build_docs.py
 # open docs/index.html in a browser
 </code></pre>
-
-<p>Public docs URL: **https://sumesh-s-dev.github.io/cforge/** (deployed from the <code>gh-pages</code> branch on each push to <code>main</code>).</p>
-
-<p>In GitHub: **Settings → Pages → Source: Deploy from branch <code>gh-pages</code> / root** (set once after the first successful Pages workflow).</p>
-
+<p>Public docs URL: <strong>https://sumesh-s-dev.github.io/cforge/</strong> (deployed from the <code>gh-pages</code> branch on each push to <code>main</code>).</p>
+<p>In GitHub: <strong>Settings → Pages → Source: Deploy from branch <code>gh-pages</code> / root</strong> (set once after the first successful Pages workflow).</p>
 <h2>Environment overview</h2>
-
 <p>See <a href="../reference/environment.html">Environment variables</a> for <code>CFORGE_*</code> and <code>PORT</code>.</p>
 <footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
 </main>

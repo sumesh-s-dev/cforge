@@ -43,51 +43,34 @@
 </ul></section>
 </nav>
 <main><h1>CForge</h1>
-
-<p>&lt;p class=&quot;hero&quot;&gt;Low-level systems language with a complete backend specification and a runnable HTTP/TLS/SQLite stack.&lt;/p&gt;</p>
-
+<p class="hero">Low-level systems language with a complete backend specification and a runnable HTTP/TLS/SQLite stack.</p>
 <h2>Documentation</h2>
-
 <table>
 <tr><th></th><th></th></tr>
-<table>
-<tr><th>**Book**</th><th>[Introduction](learn/introduction.html)</th></tr>
-<table>
-<tr><th>**Full backend spec**</th><th>[Specification index](spec/index.html) — 100% architecture document</th></tr>
-<table>
-<tr><th>**Status**</th><th>[Release 1.0](status.html)</th></tr>
-
-<p>CForge sits close to the machine. Handlers are written in <code>.cforge</code> files. Networking, HTTP, JSON, TLS, and SQLite live in a **C runtime library**, not in the language grammar.</p>
-
+<tr><td><strong>Book</strong></td><td><a href="learn/introduction.html">Introduction</a></td></tr>
+<tr><td><strong>Full backend spec</strong></td><td><a href="spec/index.html">Specification index</a> — 100% architecture document</td></tr>
+<tr><td><strong>Status</strong></td><td><a href="status.html">Release 1.0</a></td></tr>
+</table>
+<p>CForge sits close to the machine. Handlers are written in <code>.cforge</code> files. Networking, HTTP, JSON, TLS, and SQLite live in a <strong>C runtime library</strong>, not in the language grammar.</p>
 <h2>Two compile paths</h2>
-
 <table>
 <tr><th>Path</th><th>Command</th><th>Output</th></tr>
-<table>
-<tr><th>**Server**</th><th>`./cforge build`</th><th>Native binary via generated C11 + runtime</th></tr>
-<table>
-<tr><th>**Machine**</th><th>`./cforge machine prog.cforge`</th><th>x86-64 ELF without gcc</th></tr>
-
+<tr><td><strong>Server</strong></td><td><code>./cforge build</code></td><td>Native binary via generated C11 + runtime</td></tr>
+<tr><td><strong>Machine</strong></td><td><code>./cforge machine prog.cforge</code></td><td>x86-64 ELF without gcc</td></tr>
+</table>
 <h2>Quick links</h2>
-
 <ul>
 <li><a href="learn/introduction.html">Introduction</a> — philosophy and boundaries</li>
-<ul>
 <li><a href="learn/install.html">Installation</a> — clone, build, test</li>
-<ul>
 <li><a href="learn/first-program.html">First program</a> — hello service and native add</li>
-<ul>
 <li><a href="status.html">Implementation status</a> — what is complete in release 0.1</li>
-
+</ul>
 <h2>Live demo</h2>
-
 <p>After <a href="learn/install.html">installation</a>:</p>
-
 <pre><code>
 ./cforge deploy
 curl http://127.0.0.1:8080/health
 </code></pre>
-
 <p>Repository: <a href="https://github.com/sumesh-s-dev/cforge">github.com/sumesh-s-dev/cforge</a></p>
 <footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
 </main>

@@ -43,106 +43,70 @@
 </ul></section>
 </nav>
 <main><h1>Language reference</h1>
-
-<p>Release **0.1** — implemented subset. Syntax outside this list is a compile error.</p>
-
+<p>Release <strong>0.1</strong> — implemented subset. Syntax outside this list is a compile error.</p>
 <h2>Lexical</h2>
-
 <ul>
 <li>Line comments: <code>// ...</code></li>
-<ul>
 <li>Identifiers: <code>[A-Za-z_][A-Za-z0-9_]*</code></li>
-<ul>
 <li>String literals: <code>&quot;...&quot;</code> with escapes <code>\n</code>, <code>\t</code>, <code>\r</code>, <code>\&quot;</code>, <code>\\</code>, <code>\/</code></li>
-<ul>
 <li>Integer literals: decimal <code>u64</code> / <code>i32</code> range per use site</li>
-
+</ul>
 <h2>Types</h2>
-
 <table>
 <tr><th>CForge</th><th>C (server backend)</th></tr>
-<table>
-<tr><th>`i32`, `u32`, `i64`, `u64`, `u16`, `u8`</th><th>same-width integers</th></tr>
-<table>
-<tr><th>`bool`</th><th>`int32_t` (0 / non-zero)</th></tr>
-<table>
-<tr><th>`Slice`</th><th>`{ uint8_t *ptr; size_t len; }`</th></tr>
-<table>
-<tr><th>`Ctx`</th><th>opaque service context</th></tr>
-<table>
-<tr><th>`*T`</th><th>pointer</th></tr>
-
+<tr><td><code>i32</code>, <code>u32</code>, <code>i64</code>, <code>u64</code>, <code>u16</code>, <code>u8</code></td><td>same-width integers</td></tr>
+<tr><td><code>bool</code></td><td><code>int32_t</code> (0 / non-zero)</td></tr>
+<tr><td><code>Slice</code></td><td><code>{ uint8_t *ptr; size_t len; }</code></td></tr>
+<tr><td><code>Ctx</code></td><td>opaque service context</td></tr>
+<tr><td><code>*T</code></td><td>pointer</td></tr>
+</table>
 <p><code>Slice</code> copies two words (pointer + length). It does not allocate.</p>
-
 <h2>Functions</h2>
-
 <pre><code>
 fn name(param: Type, ...) -&gt; ReturnType {
     ...
 }
 </code></pre>
-
 <p><code>main</code> must exist. It is emitted as <code>cforge_main</code> with a C <code>main</code> wrapper.</p>
-
 <h2>Statements</h2>
-
 <table>
 <tr><th>Statement</th><th>Example</th></tr>
-<table>
-<tr><th>let</th><th>`let x: u64 = 0;`</th></tr>
-<table>
-<tr><th>return</th><th>`return ctx_status(ctx, 404);`</th></tr>
-<table>
-<tr><th>if / else</th><th>`if x != 0 { ... } else { ... }`</th></tr>
-<table>
-<tr><th>while</th><th>`while cond { ... }`</th></tr>
-<table>
-<tr><th>expression</th><th>`db_get_user(ctx, id, &amp;oid, &amp;name, &amp;age);`</th></tr>
-
+<tr><td>let</td><td><code>let x: u64 = 0;</code></td></tr>
+<tr><td>return</td><td><code>return ctx_status(ctx, 404);</code></td></tr>
+<tr><td>if / else</td><td><code>if x != 0 { ... } else { ... }</code></td></tr>
+<tr><td>while</td><td><code>while cond { ... }</code></td></tr>
+<tr><td>expression</td><td><code>db_get_user(ctx, id, &amp;oid, &amp;name, &amp;age);</code></td></tr>
+</table>
 <h2>Expressions</h2>
-
 <ul>
 <li>Literals, identifiers, calls <code>f(a, b)</code></li>
-<ul>
 <li>Field access on <code>Slice</code>: <code>.len</code>, <code>.ptr</code></li>
-<ul>
 <li>Operators: <code>+ - * / == != &lt; &gt; &lt;= &gt;=</code>, unary <code>&amp;</code>, <code>-</code>, <code>!</code></li>
-<ul>
 <li>Address-of: <code>&amp;id</code> for pointer parameters</li>
-
+</ul>
 <h2>Machine-only syntax</h2>
-
 <p>When using <code>./cforge machine</code>, raw instructions are allowed in function bodies:</p>
-
 <pre><code>
 add r0, r1;
 mov r2, 42;
 syscall;
 ret;
 </code></pre>
-
-<p>Registers **r0–r7** map to System V AMD64 argument registers. **<code>ret</code>** moves r0 → rax.</p>
-
+<p>Registers <strong>r0–r7</strong> map to System V AMD64 argument registers. <strong><code>ret</code></strong> moves r0 → rax.</p>
 <p>The server backend (<code>./cforge build</code>) rejects raw instructions — use the <a href="machine.html">machine backend</a>.</p>
-
 <h2>Not in 0.1</h2>
-
 <ul>
 <li>generics, modules, <code>async fn</code>, comptime derives</li>
-<ul>
 <li>operator overloading, enums, traits</li>
-
+</ul>
 <h2>Struct types (1.0)</h2>
-
 <pre><code>
 struct CreateUser {
     name: Slice;
     age: u32;
 }
 </code></pre>
-
 <p>Structs lower to C <code>typedef struct</code> in generated code. Fields use types from the table above.</p>
-
 <p>Roadmap: <a href="../status.html">Implementation status</a>.</p>
 <footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
 </main>

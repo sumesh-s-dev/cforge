@@ -43,78 +43,50 @@
 </ul></section>
 </nav>
 <main><h1>Runtime API</h1>
-
 <p>Declared in <code>runtime/cforge_rt.h</code>. Implemented in C. Link automatically when building via <code>./cforge build</code>.</p>
-
 <h2>Slice</h2>
-
 <pre><code>
 typedef struct Slice {
     uint8_t *ptr;
     size_t len;
 } Slice;
 </code></pre>
-
 <p><code>slice_empty()</code> → zero-length slice.</p>
-
 <h2>Context</h2>
-
 <p>Opaque <code>Ctx *</code>. Handlers use runtime helpers only.</p>
-
 <h2>HTTP / response</h2>
-
 <table>
 <tr><th>Function</th><th>Purpose</th></tr>
-<table>
-<tr><th>`ctx_status(ctx, code)`</th><th>Status, empty body</th></tr>
-<table>
-<tr><th>`ctx_text(ctx, code, body)`</th><th>Plain text body</th></tr>
-<table>
-<tr><th>`ctx_json_user(ctx, code, id, name, age)`</th><th>JSON user object</th></tr>
-<table>
-<tr><th>`ctx_json_id(ctx, code, id)`</th><th>JSON `{&quot;id&quot;:N}`</th></tr>
-<table>
-<tr><th>`ctx_metrics(ctx)`</th><th>Prometheus-style text metrics</th></tr>
-<table>
-<tr><th>`ctx_param_u64(ctx, index, &amp;out)`</th><th>Parse `:id` route param</th></tr>
-
+<tr><td><code>ctx_status(ctx, code)</code></td><td>Status, empty body</td></tr>
+<tr><td><code>ctx_text(ctx, code, body)</code></td><td>Plain text body</td></tr>
+<tr><td><code>ctx_json_user(ctx, code, id, name, age)</code></td><td>JSON user object</td></tr>
+<tr><td><code>ctx_json_id(ctx, code, id)</code></td><td>JSON <code>{&quot;id&quot;:N}</code></td></tr>
+<tr><td><code>ctx_metrics(ctx)</code></td><td>Prometheus-style text metrics</td></tr>
+<tr><td><code>ctx_param_u64(ctx, index, &amp;out)</code></td><td>Parse <code>:id</code> route param</td></tr>
+</table>
 <p>Return <code>0</code> on success, non-zero on parse failure.</p>
-
 <h2>JSON</h2>
-
 <table>
 <tr><th>Function</th><th>Purpose</th></tr>
-<table>
-<tr><th>`json_parse_create(ctx, &amp;name, &amp;age)`</th><th>Parse POST body `{name, age}`</th></tr>
-
+<tr><td><code>json_parse_create(ctx, &amp;name, &amp;age)</code></td><td>Parse POST body <code>{name, age}</code></td></tr>
+</table>
 <h2>Database (SQLite)</h2>
-
 <table>
 <tr><th>Function</th><th>Returns</th></tr>
-<table>
-<tr><th>`db_get_user(ctx, id, &amp;oid, &amp;name, &amp;age)`</th><th>0 ok, 1 not found, -1 error</th></tr>
-<table>
-<tr><th>`db_insert_user(ctx, name, age, &amp;id)`</th><th>0 ok, -1 error</th></tr>
-<table>
-<tr><th>`db_delete_user(ctx, id)`</th><th>0 ok, 1 not found, -1 error</th></tr>
-
+<tr><td><code>db_get_user(ctx, id, &amp;oid, &amp;name, &amp;age)</code></td><td>0 ok, 1 not found, -1 error</td></tr>
+<tr><td><code>db_insert_user(ctx, name, age, &amp;id)</code></td><td>0 ok, -1 error</td></tr>
+<tr><td><code>db_delete_user(ctx, id)</code></td><td>0 ok, 1 not found, -1 error</td></tr>
+</table>
 <h2>Server</h2>
-
 <table>
 <tr><th>Function</th><th>Purpose</th></tr>
-<table>
-<tr><th>`app_get(path, fn)`</th><th>Register GET route</th></tr>
-<table>
-<tr><th>`app_post(path, fn)`</th><th>Register POST route</th></tr>
-<table>
-<tr><th>`app_delete(path, fn)`</th><th>Register DELETE route</th></tr>
-<table>
-<tr><th>`app_listen(port)`</th><th>Block in event loop; `0` → env `PORT`</th></tr>
-
+<tr><td><code>app_get(path, fn)</code></td><td>Register GET route</td></tr>
+<tr><td><code>app_post(path, fn)</code></td><td>Register POST route</td></tr>
+<tr><td><code>app_delete(path, fn)</code></td><td>Register DELETE route</td></tr>
+<tr><td><code>app_listen(port)</code></td><td>Block in event loop; <code>0</code> → env <code>PORT</code></td></tr>
+</table>
 <p>Handler type: <code>int32_t handler(Ctx *ctx)</code>.</p>
-
 <h2>Errors</h2>
-
 <p>No exceptions. Use integer return codes and branch in the handler.</p>
 <footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
 </main>

@@ -43,11 +43,8 @@
 </ul></section>
 </nav>
 <main><h1>Compiler</h1>
-
-<p>The **cforge** driver is a Python toolchain that lexes and parses <code>.cforge</code>, then lowers to one of two backends.</p>
-
+<p>The <strong>cforge</strong> driver is a Python toolchain that lexes and parses <code>.cforge</code>, then lowers to one of two backends.</p>
 <h2>Server backend (default)</h2>
-
 <pre><code>
 app/users.cforge
     → build/users.gen.c
@@ -56,52 +53,36 @@ app/users.cforge
          + runtime/server.c json.c db.c
          + libsqlite3 libssl libcrypto
 </code></pre>
-
 <p>Entry point configured in <code>cforge.toml</code>:</p>
-
 <pre><code>
 [package]
 name = &quot;users&quot;
 entry = &quot;app/users.cforge&quot;
 </code></pre>
-
 <h3>Commands</h3>
-
 <table>
 <tr><th>Command</th><th>Action</th></tr>
-<table>
-<tr><th>`./cforge build`</th><th>Compile + link server binary</th></tr>
-<table>
-<tr><th>`./cforge check`</th><th>Parse + generate C (no link)</th></tr>
-<table>
-<tr><th>`./cforge run`</th><th>Build and exec binary</th></tr>
-
+<tr><td><code>./cforge build</code></td><td>Compile + link server binary</td></tr>
+<tr><td><code>./cforge check</code></td><td>Parse + generate C (no link)</td></tr>
+<tr><td><code>./cforge run</code></td><td>Build and exec binary</td></tr>
+</table>
 <p>Runtime symbols (<code>app_get</code>, <code>db_*</code>, …) are declared in <code>runtime/cforge_rt.h</code> and implemented in C.</p>
-
 <h2>Machine backend</h2>
-
 <pre><code>
 mach/add.cforge
     → cforge_mach.py
     → x86-64 opcodes + ELF64 header
     → executable (no gcc)
 </code></pre>
-
 <table>
 <tr><th>Command</th><th>Action</th></tr>
-<table>
-<tr><th>`./cforge machine file.cforge [-o out]`</th><th>Emit ELF</th></tr>
-<table>
-<tr><th>`./cforge machine-test`</th><th>Run add/expr fixtures</th></tr>
-
+<tr><td><code>./cforge machine file.cforge [-o out]</code></td><td>Emit ELF</td></tr>
+<tr><td><code>./cforge machine-test</code></td><td>Run add/expr fixtures</td></tr>
+</table>
 <p>Limits: integer functions, six parameters, no <code>let</code>/<code>if</code> in machine slice yet (see status page).</p>
-
 <h2>Future native compiler</h2>
-
-<p>The long-term architecture is **CForge IR → register allocation → ELF** for all programs, with the C path remaining a bootstrap backend. Release 0.1 ships both pipelines; only the machine path is gcc-free.</p>
-
+<p>The long-term architecture is <strong>CForge IR → register allocation → ELF</strong> for all programs, with the C path remaining a bootstrap backend. Release 0.1 ships both pipelines; only the machine path is gcc-free.</p>
 <h2>Diagnostics</h2>
-
 <p>Errors are <code>compile error: line: message</code> on stderr with non-zero exit.</p>
 <footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
 </main>

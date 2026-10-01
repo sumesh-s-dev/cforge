@@ -43,157 +43,96 @@
 </ul></section>
 </nav>
 <main><h1>Memory, arenas, zero-copy, and concurrency</h1>
-
-<p>CForge backend services are designed around **predictable memory**: preallocated slabs, per-request bump allocators, and explicit <code>Slice</code> ownership. This document specifies the 0.1 layout, zero-copy rules, and how concurrency models interact with lifetimes.</p>
-
+<p>CForge backend services are designed around <strong>predictable memory</strong>: preallocated slabs, per-request bump allocators, and explicit <code>Slice</code> ownership. This document specifies the 0.1 layout, zero-copy rules, and how concurrency models interact with lifetimes.</p>
 <h2>Global allocation policy</h2>
-
-<p>**Shipped (0.1):** The request hot path does not call <code>malloc</code> or <code>free</code>. Startup allocates:</p>
-
+<p><strong>Shipped (0.1):</strong> The request hot path does not call <code>malloc</code> or <code>free</code>. Startup allocates:</p>
 <ul>
 <li>Connection slot array (size × per-slot buffers)</li>
-<ul>
 <li>Route table strings (registration time only)</li>
-<ul>
 <li>SQLite connection and prepared statements</li>
-<ul>
 <li>OpenSSL context and certificate material</li>
-
+</ul>
 <p>Failure to allocate at startup is fatal before listening. Runtime expansion of limits requires restart with new environment values.</p>
-
 <p>Constants from <code>runtime/internal.h</code> (defaults):</p>
-
 <table>
 <tr><th>Constant</th><th>Value</th><th>Purpose</th></tr>
-<table>
-<tr><th>`CFORGE_MAX_CONNS_DEFAULT`</th><th>128</th><th>Connection slots</th></tr>
-<table>
-<tr><th>`CFORGE_MAX_HEADER`</th><th>8192</th><th>Header block limit</th></tr>
-<table>
-<tr><th>`CFORGE_MAX_BODY`</th><th>65536</th><th>Body limit</th></tr>
-<table>
-<tr><th>`CFORGE_MAX_NAME`</th><th>256</th><th>User name cap</th></tr>
-<table>
-<tr><th>`CFORGE_ARENA`</th><th>4096</th><th>Per-connection bump arena</th></tr>
-<table>
-<tr><th>`CFORGE_OUT_CAP`</th><th>16384</th><th>Response buffer</th></tr>
-<table>
-<tr><th>`CFORGE_MAX_ROUTES`</th><th>64</th><th>Registered routes</th></tr>
-<table>
-<tr><th>`CFORGE_IDLE_MS_DEFAULT`</th><th>30000</th><th>Idle timeout</th></tr>
-
+<tr><td><code>CFORGE_MAX_CONNS_DEFAULT</code></td><td>128</td><td>Connection slots</td></tr>
+<tr><td><code>CFORGE_MAX_HEADER</code></td><td>8192</td><td>Header block limit</td></tr>
+<tr><td><code>CFORGE_MAX_BODY</code></td><td>65536</td><td>Body limit</td></tr>
+<tr><td><code>CFORGE_MAX_NAME</code></td><td>256</td><td>User name cap</td></tr>
+<tr><td><code>CFORGE_ARENA</code></td><td>4096</td><td>Per-connection bump arena</td></tr>
+<tr><td><code>CFORGE_OUT_CAP</code></td><td>16384</td><td>Response buffer</td></tr>
+<tr><td><code>CFORGE_MAX_ROUTES</code></td><td>64</td><td>Registered routes</td></tr>
+<tr><td><code>CFORGE_IDLE_MS_DEFAULT</code></td><td>30000</td><td>Idle timeout</td></tr>
+</table>
 <h2>Per-connection layout</h2>
-
 <p>Each slot owns:</p>
-
 <pre><code>
 in[]     CFORGE_MAX_HEADER + CFORGE_MAX_BODY   raw HTTP including partial
 out[]    CFORGE_OUT_CAP                        full response before/during write
 arena    CFORGE_ARENA                          decoded strings, DB copies
 </code></pre>
-
 <p>The read buffer must hold one maximum header plus one maximum body simultaneously. The arena is a bump pointer: <code>cforge_arena_reset</code> sets offset to zero with no destructors.</p>
-
 <h2>Request arena lifecycle</h2>
-
 <pre><code>
 accept → … → parse complete → handler runs (arena allocates)
   → response queued → write completes or continues
   → cforge_arena_reset + cforge_db_release
   → next request on same keep-alive connection reuses arena from offset 0
 </code></pre>
-
 <p>Handlers may allocate multiple times in one request until the arena exhausts; overflow returns <code>-1</code> from helpers and should map to <code>500</code>.</p>
-
 <h2>Ownership table (POST /users example)</h2>
-
 <table>
 <tr><th>Bytes</th><th>Location</th><th>Freed when</th></tr>
-<table>
-<tr><th>TLS state</th><th>slot</th><th>connection close</th></tr>
-<table>
-<tr><th>Raw HTTP body</th><th>`in[]`</th><th>cursor advances after handler</th></tr>
-<table>
-<tr><th>Decoded `name`</th><th>arena</th><th>arena reset</th></tr>
-<table>
-<tr><th>Row in SQLite</th><th>database file</th><th>`DELETE` or process exit</th></tr>
-<table>
-<tr><th>JSON in response</th><th>`out[]`</th><th>overwritten on next response</th></tr>
-
+<tr><td>TLS state</td><td>slot</td><td>connection close</td></tr>
+<tr><td>Raw HTTP body</td><td><code>in[]</code></td><td>cursor advances after handler</td></tr>
+<tr><td>Decoded <code>name</code></td><td>arena</td><td>arena reset</td></tr>
+<tr><td>Row in SQLite</td><td>database file</td><td><code>DELETE</code> or process exit</td></tr>
+<tr><td>JSON in response</td><td><code>out[]</code></td><td>overwritten on next response</td></tr>
+</table>
 <p><code>db_get_user</code> returns <code>Slice</code> pointers into the arena after copying SQLite text columns—required because <code>sqlite3_reset</code> invalidates column pointers. JSON writers must finish before arena reset.</p>
-
 <h2>Zero-copy principles</h2>
-
-<p>**True zero-copy** (kernel to user without extra memcpy) applies sparingly:</p>
-
+<p><strong>True zero-copy</strong> (kernel to user without extra memcpy) applies sparingly:</p>
 <table>
 <tr><th>Path</th><th>Zero-copy?</th><th>Notes</th></tr>
-<table>
-<tr><th>Static string literal → `Slice`</th><th>Yes</th><th>Points at `.rodata`</th></tr>
-<table>
-<tr><th>HTTP body → handler `ctx-&gt;body`</th><th>Yes</th><th>View into `in[]`</th></tr>
-<table>
-<tr><th>Body → JSON string field</th><th>No</th><th>Escaping and validation copy</th></tr>
-<table>
-<tr><th>SQLite TEXT → handler</th><th>No</th><th>Copied to arena for safety</th></tr>
-<table>
-<tr><th>Response → socket</th><th>One memcpy to `out[]` then write</th><th>**Planned:** `writev` scatter if encoding streams</th></tr>
-
-<p>**Planned:** <code>sendfile</code> for static assets; <code>splice</code> between sockets for proxy mode; read-only <code>Slice</code> into mmap’d config files for the process lifetime.</p>
-
+<tr><td>Static string literal → <code>Slice</code></td><td>Yes</td><td>Points at <code>.rodata</code></td></tr>
+<tr><td>HTTP body → handler <code>ctx-&gt;body</code></td><td>Yes</td><td>View into <code>in[]</code></td></tr>
+<tr><td>Body → JSON string field</td><td>No</td><td>Escaping and validation copy</td></tr>
+<tr><td>SQLite TEXT → handler</td><td>No</td><td>Copied to arena for safety</td></tr>
+<tr><td>Response → socket</td><td>One memcpy to <code>out[]</code> then write</td><td><strong>Planned:</strong> <code>writev</code> scatter if encoding streams</td></tr>
+</table>
+<p><strong>Planned:</strong> <code>sendfile</code> for static assets; <code>splice</code> between sockets for proxy mode; read-only <code>Slice</code> into mmap’d config files for the process lifetime.</p>
 <h2>Slice safety rules for authors</h2>
-
 <p>1. Do not store <code>Slice.ptr</code> in global or static variables.</p>
 <p>2. Do not return <code>Slice</code> from handlers to the runtime except through documented out-parameters filled before return.</p>
 <p>3. Treat <code>ctx-&gt;body</code> as valid only for the synchronous handler call.</p>
 <p>4. Assume another pipelined request on the same connection will repurpose <code>in[]</code> after the current response is processed.</p>
-
-<p>The language does not enforce borrow checking. **Planned** <code>@safe</code> mode would compile-time track <code>Slice</code> scopes; 0.1 relies on discipline and short arenas.</p>
-
+<p>The language does not enforce borrow checking. <strong>Planned</strong> <code>@safe</code> mode would compile-time track <code>Slice</code> scopes; 0.1 relies on discipline and short arenas.</p>
 <h2>Concurrency and memory</h2>
-
-<p>**Model A (0.1):** Single thread—no locks on slots, arenas, or SQLite use flag. <code>busy_timeout</code> on SQLite only matters if another process opens the same DB file.</p>
-
-<p>**Model B (planned):** Workers must not share connection <code>in[]</code>/<code>out[]</code>. Patterns:</p>
-
+<p><strong>Model A (0.1):</strong> Single thread—no locks on slots, arenas, or SQLite use flag. <code>busy_timeout</code> on SQLite only matters if another process opens the same DB file.</p>
+<p><strong>Model B (planned):</strong> Workers must not share connection <code>in[]</code>/<code>out[]</code>. Patterns:</p>
 <ul>
 <li>Move request snapshot into owned buffer on handoff</li>
-<ul>
 <li>Per-worker arena pools to avoid cross-thread bump allocators</li>
-<ul>
 <li>Reference-counted immutable response bodies for cache hits</li>
-
-<p>**Read-copy-update** for read-mostly config (route table, JWT public keys) allows reload without stopping the listener—swap pointer after parsing new table in staging buffer.</p>
-
+</ul>
+<p><strong>Read-copy-update</strong> for read-mostly config (route table, JWT public keys) allows reload without stopping the listener—swap pointer after parsing new table in staging buffer.</p>
 <h2>Cache memory (design)</h2>
-
-<p>In-process LRU for hot keys uses a fixed byte cap from a dedicated slab, not the per-request arena. Eviction is explicit; no GC. Shared **Redis** cache stores serialized blobs; handlers receive copies into arena on hit. See <a href="database.html">database.html</a>.</p>
-
+<p>In-process LRU for hot keys uses a fixed byte cap from a dedicated slab, not the per-request arena. Eviction is explicit; no GC. Shared <strong>Redis</strong> cache stores serialized blobs; handlers receive copies into arena on hit. See <a href="database.html">database.html</a>.</p>
 <h2>Fragmentation and long uptime</h2>
-
-<p>Bump arenas eliminate per-request heap fragmentation. Long-lived malloc at startup (routes, SSL) is bounded. **Planned** metrics: arena high-water mark per slot, <code>out[]</code> overflow count, slab OOM at accept.</p>
-
+<p>Bump arenas eliminate per-request heap fragmentation. Long-lived malloc at startup (routes, SSL) is bounded. <strong>Planned</strong> metrics: arena high-water mark per slot, <code>out[]</code> overflow count, slab OOM at accept.</p>
 <h2>Debugging memory bugs</h2>
-
 <p>Symptoms and likely causes:</p>
-
 <table>
 <tr><th>Symptom</th><th>Likely cause</th></tr>
-<table>
-<tr><th>Garbage JSON</th><th>`Slice` into freed arena</th></tr>
-<table>
-<tr><th>Intermittent 500 on large names</th><th>Arena exhaustion</th></tr>
-<table>
-<tr><th>Crash after DELETE</th><th>Use-after-free on stored `Slice`</th></tr>
-<table>
-<tr><th>TLS memory growth</th><th>Missing `SSL_free` on error paths</th></tr>
-
+<tr><td>Garbage JSON</td><td><code>Slice</code> into freed arena</td></tr>
+<tr><td>Intermittent 500 on large names</td><td>Arena exhaustion</td></tr>
+<tr><td>Crash after DELETE</td><td>Use-after-free on stored <code>Slice</code></td></tr>
+<tr><td>TLS memory growth</td><td>Missing <code>SSL_free</code> on error paths</td></tr>
+</table>
 <p>AddressSanitizer builds of the runtime are recommended for contributors; production binaries trade ASan for speed.</p>
-
 <h2>Relation to machine backend</h2>
-
-<p>Native ELF programs use the stack and registers only—no arena. Teaching syscalls without libc malloc reinforces the same **explicit lifetime** mindset as the HTTP server.</p>
-
+<p>Native ELF programs use the stack and registers only—no arena. Teaching syscalls without libc malloc reinforces the same <strong>explicit lifetime</strong> mindset as the HTTP server.</p>
 <p>See <a href="boundary.html">boundary.html</a> for ABI types and <a href="production.html">production.html</a> for capacity planning from slot and buffer sizes.</p>
 <footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
 </main>

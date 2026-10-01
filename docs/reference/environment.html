@@ -43,38 +43,23 @@
 </ul></section>
 </nav>
 <main><h1>Environment variables</h1>
-
 <p>Read at process start by the runtime (<code>app_listen</code>).</p>
-
 <table>
 <tr><th>Variable</th><th>Default</th><th>Meaning</th></tr>
-<table>
-<tr><th>`PORT`</th><th>`8080`</th><th>HTTP listen port when `app_listen(0)`</th></tr>
-<table>
-<tr><th>`TLS_PORT`</th><th>`8443`</th><th>TLS port if certs set</th></tr>
-<table>
-<tr><th>`CFORGE_BIND`</th><th>`127.0.0.1`</th><th>IPv4 bind address</th></tr>
-<table>
-<tr><th>`CFORGE_DB`</th><th>`data/users.db`</th><th>SQLite database path</th></tr>
-<table>
-<tr><th>`CFORGE_TLS_CERT`</th><th>unset</th><th>PEM certificate path</th></tr>
-<table>
-<tr><th>`CFORGE_TLS_KEY`</th><th>unset</th><th>PEM private key path</th></tr>
-<table>
-<tr><th>`CFORGE_MAX_CONNS`</th><th>`128`</th><th>Connection slab size (1–4096)</th></tr>
-<table>
-<tr><th>`CFORGE_DB_POOL`</th><th>`4`</th><th>SQLite connections in pool (1–8)</th></tr>
-
+<tr><td><code>PORT</code></td><td><code>8080</code></td><td>HTTP listen port when <code>app_listen(0)</code></td></tr>
+<tr><td><code>TLS_PORT</code></td><td><code>8443</code></td><td>TLS port if certs set</td></tr>
+<tr><td><code>CFORGE_BIND</code></td><td><code>127.0.0.1</code></td><td>IPv4 bind address</td></tr>
+<tr><td><code>CFORGE_DB</code></td><td><code>data/users.db</code></td><td>SQLite database path</td></tr>
+<tr><td><code>CFORGE_TLS_CERT</code></td><td>unset</td><td>PEM certificate path</td></tr>
+<tr><td><code>CFORGE_TLS_KEY</code></td><td>unset</td><td>PEM private key path</td></tr>
+<tr><td><code>CFORGE_MAX_CONNS</code></td><td><code>128</code></td><td>Connection slab size (1–4096)</td></tr>
+<tr><td><code>CFORGE_DB_POOL</code></td><td><code>4</code></td><td>SQLite connections in pool (1–8)</td></tr>
+</table>
 <p>Parent directory of <code>CFORGE_DB</code> is created if missing.</p>
-
 <h2>systemd example</h2>
-
 <p>See <code>deploy/cforge-users.service.example</code> — replace <code>__CFORGE_ROOT__</code> with clone path.</p>
-
 <h2>Security</h2>
-
 <p>Default bind is localhost. Use <code>CFORGE_BIND=0.0.0.0</code> only with firewall rules and real TLS certificates.</p>
-
 <p>Private keys are gitignored; generate with <code>./cforge deploy</code> or OpenSSL.</p>
 <footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
 </main>

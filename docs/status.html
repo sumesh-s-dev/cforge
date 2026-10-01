@@ -43,84 +43,53 @@
 </ul></section>
 </nav>
 <main><h1>Implementation status</h1>
-
-<p>**Specification:** <a href="../spec/index.html">100% complete on the documentation site</a> — full backend ecosystem design (boundary through production).</p>
-
-<p>**Release 1.0 (this repository)** ships the runnable vertical slice plus libraries specified as *Shipped* below.</p>
-
-<p>Public site: **https://sumesh-s-dev.github.io/cforge/**</p>
-
+<p><strong>Specification:</strong> <a href="../spec/index.html">100% complete on the documentation site</a> — full backend ecosystem design (boundary through production).</p>
+<p><strong>Release 1.0 (this repository)</strong> ships the runnable vertical slice plus libraries specified as *Shipped* below.</p>
+<p>Public site: <strong>https://sumesh-s-dev.github.io/cforge/</strong></p>
 <h2>Shipped in release 1.0</h2>
-
 <table>
 <tr><th>Area</th><th>Status</th></tr>
-<table>
-<tr><th>Full backend **specification** (9 chapters)</th><th>**100%** documented</th></tr>
-<table>
-<tr><th>Lexer / parser + **struct** types</th><th>Done</th></tr>
-<table>
-<tr><th>C server backend + runtime</th><th>Done</th></tr>
-<table>
-<tr><th>Machine ELF backend (x86-64)</th><th>Done</th></tr>
-<table>
-<tr><th>epoll HTTP/1.1 + TLS 1.3</th><th>Done</th></tr>
-<table>
-<tr><th>SQLite users API + **connection pool**</th><th>Done</th></tr>
-<table>
-<tr><th>Structured **logging** (`cforge_logf`)</th><th>Done</th></tr>
-<table>
-<tr><th>Request arena + backpressure</th><th>Done</th></tr>
-<table>
-<tr><th>**`cforge.lock`** (`./cforge package`)</th><th>Done</th></tr>
-<table>
-<tr><th>Toolchain (build, check, test, deploy, all, machine)</th><th>Done</th></tr>
-<table>
-<tr><th>GitHub CI + Pages docs</th><th>Done</th></tr>
-<table>
-<tr><th>Example service + END-TO-END guide</th><th>Done</th></tr>
-
+<tr><td>Full backend <strong>specification</strong> (9 chapters)</td><td><strong>100%</strong> documented</td></tr>
+<tr><td>Lexer / parser + <strong>struct</strong> types</td><td>Done</td></tr>
+<tr><td>C server backend + runtime</td><td>Done</td></tr>
+<tr><td>Machine ELF backend (x86-64)</td><td>Done</td></tr>
+<tr><td>epoll HTTP/1.1 + TLS 1.3</td><td>Done</td></tr>
+<tr><td>SQLite users API + <strong>connection pool</strong></td><td>Done</td></tr>
+<tr><td>Structured <strong>logging</strong> (<code>cforge_logf</code>)</td><td>Done</td></tr>
+<tr><td>Request arena + backpressure</td><td>Done</td></tr>
+<tr><td><strong><code>cforge.lock</code></strong> (<code>./cforge package</code>)</td><td>Done</td></tr>
+<tr><td>Toolchain (build, check, test, deploy, all, machine)</td><td>Done</td></tr>
+<tr><td>GitHub CI + Pages docs</td><td>Done</td></tr>
+<tr><td>Example service + END-TO-END guide</td><td>Done</td></tr>
+</table>
 <h2>Planned (spec describes; code follows)</h2>
-
 <table>
 <tr><th>Area</th><th>Spec</th><th>Code</th></tr>
-<table>
-<tr><th>PostgreSQL wire / libpq</th><th>Documented</th><th>Planned</th></tr>
-<table>
-<tr><th>HTTP/2, HTTP/3, WebSockets</th><th>Documented</th><th>Planned</th></tr>
-<table>
-<tr><th>Native IR compiler for server</th><th>Documented</th><th>In progress (`cforge_mach`)</th></tr>
-<table>
-<tr><th>Redis / Kafka / NATS clients</th><th>Documented</th><th>Planned</th></tr>
-<table>
-<tr><th>`@checked` / `@safe` modes</th><th>Documented</th><th>Planned</th></tr>
-<table>
-<tr><th>Package registry + semver resolver</th><th>Documented</th><th>Lockfile only</th></tr>
-
+<tr><td>PostgreSQL wire / libpq</td><td>Documented</td><td>Planned</td></tr>
+<tr><td>HTTP/2, HTTP/3, WebSockets</td><td>Documented</td><td>Planned</td></tr>
+<tr><td>Native IR compiler for server</td><td>Documented</td><td>In progress (<code>cforge_mach</code>)</td></tr>
+<tr><td>Redis / Kafka / NATS clients</td><td>Documented</td><td>Planned</td></tr>
+<tr><td><code>@checked</code> / <code>@safe</code> modes</td><td>Documented</td><td>Planned</td></tr>
+<tr><td>Package registry + semver resolver</td><td>Documented</td><td>Lockfile only</td></tr>
+</table>
 <h2>Environment</h2>
-
 <table>
 <tr><th>Variable</th><th>New in 1.0</th></tr>
-<table>
-<tr><th>`CFORGE_DB_POOL`</th><th>SQLite pool size (1–8, default 4)</th></tr>
-
+<tr><td><code>CFORGE_DB_POOL</code></td><td>SQLite pool size (1–8, default 4)</td></tr>
+</table>
 <h2>Verification</h2>
-
 <pre><code>
 ./cforge package
 ./cforge test
 curl http://127.0.0.1:8080/health
 </code></pre>
-
 <h2>Definition of complete</h2>
-
 <table>
 <tr><th>Scope</th><th>Coverage</th></tr>
-<table>
-<tr><th>Original backend architecture **document**</th><th>**100%** on [spec index](../spec/index.html)</th></tr>
-<table>
-<tr><th>Same architecture **implemented in code**</th><th>**Core path 100%**; advanced subsystems per table above</th></tr>
-
-<p>CForge 1.0 is **spec-complete** and **production-demo-complete** for the HTTP/SQLite/TLS stack. Remaining spec items are explicit roadmap entries, not missing documentation.</p>
+<tr><td>Original backend architecture <strong>document</strong></td><td><strong>100%</strong> on <a href="../spec/index.html">spec index</a></td></tr>
+<tr><td>Same architecture <strong>implemented in code</strong></td><td><strong>Core path 100%</strong>; advanced subsystems per table above</td></tr>
+</table>
+<p>CForge 1.0 is <strong>spec-complete</strong> and <strong>production-demo-complete</strong> for the HTTP/SQLite/TLS stack. Remaining spec items are explicit roadmap entries, not missing documentation.</p>
 <footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
 </main>
 </div>

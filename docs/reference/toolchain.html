@@ -43,47 +43,29 @@
 </ul></section>
 </nav>
 <main><h1>Toolchain commands</h1>
-
 <p>All commands run from the repository root via <code>./cforge</code>.</p>
-
 <table>
 <tr><th>Command</th><th>Description</th></tr>
-<table>
-<tr><th>`build`</th><th>Server backend: `.cforge` → C → `build/cforge-users`</th></tr>
-<table>
-<tr><th>`check`</th><th>Parse and emit `build/users.gen.c` without linking</th></tr>
-<table>
-<tr><th>`run`</th><th>Build and replace process with server binary</th></tr>
-<table>
-<tr><th>`test`</th><th>Integration tests (HTTP + TLS + machine ELF)</th></tr>
-<table>
-<tr><th>`deploy`</th><th>Build, install systemd user unit, health check</th></tr>
-<table>
-<tr><th>`status`</th><th>GET `/health` and `/metrics` on port 8080</th></tr>
-<table>
-<tr><th>`all`</th><th>`test` + `deploy` + `status` + git publish script</th></tr>
-<table>
-<tr><th>`package`</th><th>Write `cforge.lock` source fingerprints</th></tr>
-<table>
-<tr><th>`machine &lt;file&gt; [-o path]`</th><th>Native ELF backend</th></tr>
-<table>
-<tr><th>`machine-test`</th><th>Verify mach/add and mach/expr exit codes</th></tr>
-
+<tr><td><code>build</code></td><td>Server backend: <code>.cforge</code> → C → <code>build/cforge-users</code></td></tr>
+<tr><td><code>check</code></td><td>Parse and emit <code>build/users.gen.c</code> without linking</td></tr>
+<tr><td><code>run</code></td><td>Build and replace process with server binary</td></tr>
+<tr><td><code>test</code></td><td>Integration tests (HTTP + TLS + machine ELF)</td></tr>
+<tr><td><code>deploy</code></td><td>Build, install systemd user unit, health check</td></tr>
+<tr><td><code>status</code></td><td>GET <code>/health</code> and <code>/metrics</code> on port 8080</td></tr>
+<tr><td><code>all</code></td><td><code>test</code> + <code>deploy</code> + <code>status</code> + git publish script</td></tr>
+<tr><td><code>package</code></td><td>Write <code>cforge.lock</code> source fingerprints</td></tr>
+<tr><td><code>machine &lt;file&gt; [-o path]</code></td><td>Native ELF backend</td></tr>
+<tr><td><code>machine-test</code></td><td>Verify mach/add and mach/expr exit codes</td></tr>
+</table>
 <h2>Scripts</h2>
-
 <table>
 <tr><th>Script</th><th>Purpose</th></tr>
-<table>
-<tr><th>`scripts/publish-github.sh`</th><th>Push to github.com/sumesh-s-dev/cforge</th></tr>
-<table>
-<tr><th>`scripts/do-all.sh`</th><th>Same as `cforge all`</th></tr>
-<table>
-<tr><th>`docs/build_docs.py`</th><th>Regenerate static HTML docs</th></tr>
-
+<tr><td><code>scripts/publish-github.sh</code></td><td>Push to github.com/sumesh-s-dev/cforge</td></tr>
+<tr><td><code>scripts/do-all.sh</code></td><td>Same as <code>cforge all</code></td></tr>
+<tr><td><code>docs/build_docs.py</code></td><td>Regenerate static HTML docs</td></tr>
+</table>
 <h2>CI</h2>
-
 <p>GitHub Actions workflow <code>.github/workflows/ci.yml</code> runs <code>./cforge test</code> on Ubuntu.</p>
-
 <p>Pages deploy: <code>.github/workflows/pages.yml</code> → https://sumesh-s-dev.github.io/cforge/</p>
 <footer class="doc-footer">CForge documentation · <a href="https://github.com/sumesh-s-dev/cforge">Source</a></footer>
 </main>
