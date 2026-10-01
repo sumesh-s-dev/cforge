@@ -43,7 +43,9 @@ python3 docs/build_docs.py
 # open docs/index.html in a browser
 ```
 
-Public docs URL after GitHub Pages deploy: **https://sumesh-s-dev.github.io/cforge/**
+Public docs URL: **https://sumesh-s-dev.github.io/cforge/** (deployed from the `gh-pages` branch on each push to `main`).
+
+In GitHub: **Settings → Pages → Source: Deploy from branch `gh-pages` / root** (set once after the first successful Pages workflow).
 
 ## Environment overview
 
