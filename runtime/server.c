@@ -7,6 +7,8 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <openssl/err.h>
+#include <openssl/evp.h>
+#include <openssl/sha.h>
 #include <openssl/ssl.h>
 #include <signal.h>
 #include <stdio.h>
@@ -29,6 +31,7 @@ typedef struct Conn {
     int close_after;
     int want_write;
     int pause_read;
+    int ws;
     SSL *ssl;
     uint8_t *in;
     size_t in_cap;
@@ -67,6 +70,7 @@ static int g_accepting = 1;
 static int g_draining = 0;
 static SSL_CTX *g_ssl;
 static uint64_t g_requests;
+static uint64_t g_ws_upgrades;
 static uint64_t g_active;
 static int g_paused;
 static uint64_t g_idle_ms = CFORGE_IDLE_MS_DEFAULT;
@@ -237,12 +241,32 @@ int32_t ctx_json_id(Ctx *ctx, int32_t status, uint64_t id) {
     return cforge_queue(ctx, status, "application/json", body, (size_t)n, NULL);
 }
 
+int32_t ctx_problem(Ctx *ctx, int32_t status, Slice title, Slice detail) {
+    char body[512];
+    size_t off = 0;
+    int n = snprintf(body, sizeof body, "{\"title\":");
+    if (n < 0 || (size_t)n >= sizeof body) return -1;
+    off = (size_t)n;
+    if (append_json_str(body, sizeof body, &off, title) != 0) return -1;
+    n = snprintf(body + off, sizeof body - off, ",\"detail\":");
+    if (n < 0 || (size_t)n >= sizeof body - off) return -1;
+    off += (size_t)n;
+    if (append_json_str(body, sizeof body, &off, detail) != 0) return -1;
+    n = snprintf(body + off, sizeof body - off, ",\"status\":%d}", status);
+    if (n < 0 || (size_t)n >= sizeof body - off) return -1;
+    off += (size_t)n;
+    return cforge_queue(ctx, status, "application/problem+json", body, off, NULL);
+}
+
 int32_t ctx_metrics(Ctx *ctx) {
-    char body[320];
+    char body[420];
     int n = snprintf(body, sizeof body,
-                     "requests_total %llu\nactive_connections %llu\ndb_errors %llu\naccept_paused %d\ndb_backend %s\n",
+                     "requests_total %llu\nactive_connections %llu\ndb_errors %llu\naccept_paused %d\n"
+                     "db_backend %s\nredis_backend %s\nredis_errors %llu\nws_upgrades %llu\n",
                      (unsigned long long)g_requests, (unsigned long long)g_active,
-                     (unsigned long long)cforge_db_errors(), g_paused, cforge_db_backend());
+                     (unsigned long long)cforge_db_errors(), g_paused, cforge_db_backend(),
+                     cforge_redis_backend(), (unsigned long long)cforge_redis_errors(),
+                     (unsigned long long)g_ws_upgrades);
     if (n < 0 || (size_t)n >= sizeof body) return -1;
     return cforge_queue(ctx, 200, "text/plain; charset=utf-8", body, (size_t)n, NULL);
 }
@@ -623,6 +647,219 @@ static Parsed parse_request(const uint8_t *buf, size_t len) {
     return p;
 }
 
+static const char WS_GUID[] = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+
+static void conn_close(Conn *c, int idx);
+static int flush_out(Conn *c, int idx);
+static void compact_in(Conn *c);
+
+static int ws_find_key(const uint8_t *buf, size_t len, const uint8_t **key, size_t *klen) {
+    *key = NULL;
+    *klen = 0;
+    size_t i = 0;
+    while (i + 1 < len && !(buf[i] == '\r' && buf[i + 1] == '\n')) {
+        i++;
+    }
+    if (i + 1 >= len) {
+        return -1;
+    }
+    i += 2;
+    int saw_upgrade = 0;
+    for (;;) {
+        if (i + 1 >= len) {
+            return -1;
+        }
+        if (buf[i] == '\r' && buf[i + 1] == '\n') {
+            break;
+        }
+        size_t nb = i;
+        while (i < len && buf[i] != ':' && buf[i] != '\r') {
+            i++;
+        }
+        if (i >= len || buf[i] != ':') {
+            return -1;
+        }
+        size_t nlen = i - nb;
+        i++;
+        while (i < len && buf[i] == ' ') {
+            i++;
+        }
+        size_t vb = i;
+        while (i + 1 < len && !(buf[i] == '\r' && buf[i + 1] == '\n')) {
+            i++;
+        }
+        if (i + 1 >= len) {
+            return -1;
+        }
+        size_t vlen = i - vb;
+        while (vlen > 0 && buf[vb + vlen - 1] == ' ') {
+            vlen--;
+        }
+        i += 2;
+        if (header_name_eq(buf + nb, nlen, "upgrade") && contains_ci(buf + vb, vlen, "websocket")) {
+            saw_upgrade = 1;
+        }
+        if (header_name_eq(buf + nb, nlen, "sec-websocket-key") && vlen > 0 && vlen <= 64) {
+            *key = buf + vb;
+            *klen = vlen;
+        }
+    }
+    return saw_upgrade && *klen > 0 ? 0 : -1;
+}
+
+static int ws_queue_101(Conn *c, const char *accept) {
+    char head[512];
+    int hn = snprintf(head, sizeof head,
+                      "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+                      "Sec-WebSocket-Accept: %s\r\n\r\n",
+                      accept);
+    if (hn < 0 || (size_t)hn >= c->out_cap) {
+        return -1;
+    }
+    memcpy(c->out, head, (size_t)hn);
+    c->out_len = (size_t)hn;
+    c->out_off = 0;
+    return 0;
+}
+
+static int ws_try_upgrade(Conn *c, const uint8_t *buf, size_t len, size_t consumed, int idx) {
+    const uint8_t *key = NULL;
+    size_t klen = 0;
+    if (ws_find_key(buf, len, &key, &klen) != 0) {
+        return -1;
+    }
+    char material[96];
+    if (klen + sizeof WS_GUID - 1 >= sizeof material) {
+        return -1;
+    }
+    memcpy(material, key, klen);
+    memcpy(material + klen, WS_GUID, sizeof WS_GUID - 1);
+    material[klen + sizeof WS_GUID - 1] = 0;
+    unsigned char digest[20];
+    SHA1((const unsigned char *)material, klen + sizeof WS_GUID - 1, digest);
+    char accept[64];
+    int en = EVP_EncodeBlock((unsigned char *)accept, digest, 20);
+    if (en < 0 || (size_t)en >= sizeof accept) {
+        return -1;
+    }
+    accept[en] = 0;
+    while (en > 0 && accept[en - 1] == '\n') {
+        accept[--en] = 0;
+    }
+    if (en > 0 && accept[en - 1] == '\r') {
+        accept[--en] = 0;
+    }
+    if (ws_queue_101(c, accept) != 0) {
+        return -1;
+    }
+    c->ws = 1;
+    c->close_after = 0;
+    g_ws_upgrades++;
+    (void)idx;
+    (void)consumed;
+    return 0;
+}
+
+static int ws_send_frame(Conn *c, int idx, uint8_t opcode, const uint8_t *payload, size_t plen) {
+    if (plen > 125) {
+        return -1;
+    }
+    uint8_t hdr[10];
+    size_t hlen = 2;
+    hdr[0] = (uint8_t)(0x80 | (opcode & 0x0f));
+    hdr[1] = (uint8_t)plen;
+    if (c->out_len + hlen + plen > c->out_cap) {
+        return -1;
+    }
+    memcpy(c->out + c->out_len, hdr, hlen);
+    c->out_len += hlen;
+    if (plen > 0) {
+        memcpy(c->out + c->out_len, payload, plen);
+        c->out_len += plen;
+    }
+    c->out_off = 0;
+    c->want_write = 1;
+    return flush_out(c, idx);
+}
+
+static void ws_pump(Conn *c, int idx) {
+    for (;;) {
+        if (c->out_off < c->out_len) {
+            if (flush_out(c, idx) <= 0) {
+                return;
+            }
+        }
+        if (!c->used) {
+            return;
+        }
+        size_t avail = c->in_len - c->in_off;
+        if (avail < 2) {
+            compact_in(c);
+            return;
+        }
+        const uint8_t *p = c->in + c->in_off;
+        uint8_t opcode = p[0] & 0x0f;
+        int masked = (p[1] & 0x80) != 0;
+        size_t plen = p[1] & 0x7f;
+        size_t need = 2;
+        if (plen == 126) {
+            if (avail < 4) {
+                return;
+            }
+            plen = ((size_t)p[2] << 8) | p[3];
+            need = 4;
+        } else if (plen == 127) {
+            conn_close(c, idx);
+            return;
+        }
+        if (masked) {
+            need += 4;
+        }
+        need += plen;
+        if (avail < need) {
+            return;
+        }
+        const uint8_t *payload = p + (masked ? 6 : 2);
+        if (masked) {
+            uint8_t mask[4];
+            memcpy(mask, p + 2, 4);
+            payload = p + 6;
+            uint8_t tmp[126];
+            if (plen > sizeof tmp) {
+                conn_close(c, idx);
+                return;
+            }
+            for (size_t i = 0; i < plen; i++) {
+                tmp[i] = payload[i] ^ mask[i % 4];
+            }
+            c->in_off += need;
+            if (opcode == 8) {
+                conn_close(c, idx);
+                return;
+            }
+            if (opcode == 9) {
+                if (ws_send_frame(c, idx, 0x0a, tmp, plen) <= 0) {
+                    return;
+                }
+                continue;
+            }
+            if (opcode == 1 || opcode == 2) {
+                if (ws_send_frame(c, idx, 1, tmp, plen) <= 0) {
+                    return;
+                }
+                continue;
+            }
+            compact_in(c);
+            continue;
+        }
+        c->in_off += need;
+        if (opcode == 8) {
+            conn_close(c, idx);
+            return;
+        }
+    }
+}
+
 static int conn_read(Conn *c, uint8_t *dst, size_t cap) {
     if (cap > INT_MAX) cap = INT_MAX;
     if (c->ssl) {
@@ -684,6 +921,7 @@ static void conn_close(Conn *c, int idx) {
         c->fd = -1;
     }
     c->used = 0;
+    c->ws = 0;
     c->in_len = 0;
     c->in_off = 0;
     c->out_len = 0;
@@ -752,6 +990,10 @@ static void queue_err(Conn *c, int status, const char *msg) {
 }
 
 static void pump(Conn *c, int idx) {
+    if (c->ws) {
+        ws_pump(c, idx);
+        return;
+    }
     for (;;) {
         if (c->out_off < c->out_len) {
             if (flush_out(c, idx) <= 0) return;
@@ -776,6 +1018,20 @@ static void pump(Conn *c, int idx) {
         }
         if (p.kind == 2) {
             queue_err(c, p.err_status ? p.err_status : 400, p.err ? p.err : "bad request");
+            flush_out(c, idx);
+            if (c->used) conn_close(c, idx);
+            return;
+        }
+        if (p.method == M_GET && p.path.len == 3 && p.path.ptr && memcmp(p.path.ptr, "/ws", 3) == 0) {
+            if (ws_try_upgrade(c, c->in + c->in_off, c->in_len - c->in_off, p.consumed, idx) == 0) {
+                c->in_off += p.consumed;
+                if (flush_out(c, idx) <= 0) {
+                    return;
+                }
+                ws_pump(c, idx);
+                return;
+            }
+            queue_err(c, 400, "bad websocket");
             flush_out(c, idx);
             if (c->used) conn_close(c, idx);
             return;
@@ -1060,6 +1316,12 @@ int32_t app_listen(uint16_t port) {
         }
     }
     if (cforge_db_open(db_path) != 0) return 1;
+    const char *redis_url = getenv("CFORGE_REDIS_URL");
+    if (redis_url && redis_url[0]) {
+        if (cforge_redis_open(redis_url) != 0) {
+            fprintf(stderr, "WARN redis unavailable, continuing without cache\n");
+        }
+    }
 
     const char *cert = getenv("CFORGE_TLS_CERT");
     const char *key = getenv("CFORGE_TLS_KEY");
@@ -1219,6 +1481,7 @@ int32_t app_listen(uint16_t port) {
     if (g_epfd >= 0) close(g_epfd);
     if (g_ssl) SSL_CTX_free(g_ssl);
     cforge_db_close();
+    cforge_redis_close();
     free(g_conns);
     free(g_free_stack);
     fprintf(stderr, "INFO cforge-users stopped\n");

@@ -34,7 +34,7 @@ fn post_user(ctx: *Ctx) -> i32 {
     let age: u32 = 0;
     let jrc: i32 = json_parse_create(ctx, &name, &age);
     if jrc != 0 {
-        return ctx_text(ctx, 400, "bad json");
+        return ctx_problem(ctx, 400, "bad json", "request body is not valid JSON for create user");
     }
     if name.len == 0 {
         return ctx_text(ctx, 400, "bad name");

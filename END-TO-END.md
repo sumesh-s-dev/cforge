@@ -512,19 +512,24 @@ Some programs compile to ELF without gcc:
 
 Registers `r0`–`r7` map to System V argument registers. Raw instructions (`add r0, r1; ret;`) and small `return a + b` forms lower to x86-64 in `cforge_mach.py`. The users HTTP server still uses the C runtime path (`./cforge build`).
 
+## Full stack verification
+
+```bash
+./cforge everything    # check, lockfile, test, deploy, smoke, docs-site build, deploy-docker if docker exists
+./cforge e2e           # faster: test + systemd deploy + smoke only
+```
+
+Also shipped: **WebSocket** echo on `GET /ws`, optional **Redis** (`CFORGE_REDIS_URL`), **Postgres** (`CFORGE_PG_DSN`), **Docker Compose**, and **Problem Details** JSON for some 400 responses.
+
 ## What this slice does not do
 
-These were part of the larger design and are not in this binary:
+Roadmap items (spec documented; not in the binary yet):
 
-- PostgreSQL or MySQL wire clients
-- a real connection pool (one SQLite connection, released after each handler)
-- HTTP/2, HTTP/3, WebSockets, chunked request bodies
-- a general JSON serializer, MessagePack, CBOR, or Protobuf
-- password hashing, JWT, OAuth, sessions
-- Redis, Kafka, NATS, RabbitMQ
-- tracing, histograms, or a separate worker thread
-- a borrow checker or use-after-free prevention (`@safe` is not implemented)
-- `struct` declarations, generics, `async fn`, or comptime derives
-- Docker or Kubernetes manifests
+- HTTP/2, HTTP/3, chunked request bodies
+- Kafka, NATS, RabbitMQ
+- JWT, OAuth, sessions, password hashing
+- OpenTelemetry / histogram metrics, worker pools
+- full `@safe` borrow checking, generics, `async fn`
+- public package registry with semver resolver
 
-Use-after-free and data races are still possible. The current protection is the request arena’s short lifetime, bounds checks inside the parser, and the fact that only one thread touches the sockets and SQLite.
+Use-after-free and data races are still possible. Protection is the request arena’s short lifetime, parser bounds checks, and single-threaded I/O.

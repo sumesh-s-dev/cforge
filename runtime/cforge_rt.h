@@ -20,6 +20,7 @@ int32_t ctx_status(Ctx *ctx, int32_t status);
 int32_t ctx_text(Ctx *ctx, int32_t status, Slice body);
 int32_t ctx_json_user(Ctx *ctx, int32_t status, uint64_t id, Slice name, uint32_t age);
 int32_t ctx_json_id(Ctx *ctx, int32_t status, uint64_t id);
+int32_t ctx_problem(Ctx *ctx, int32_t status, Slice title, Slice detail);
 int32_t ctx_metrics(Ctx *ctx);
 
 int32_t json_parse_create(Ctx *ctx, Slice *name, uint32_t *age);

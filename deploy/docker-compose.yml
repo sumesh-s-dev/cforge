@@ -11,6 +11,10 @@ services:
       timeout: 3s
       retries: 15
 
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", ""]
+
   cforge:
     build:
       context: ..
@@ -18,11 +22,14 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_started
     environment:
       PORT: "8080"
       TLS_PORT: "8443"
       CFORGE_BIND: "0.0.0.0"
       CFORGE_PG_DSN: "postgres://cforge:cforge@db:5432/users?sslmode=disable"
+      CFORGE_REDIS_URL: "redis://redis:6379"
       CFORGE_TLS_CERT: "/src/deploy/cert.pem"
       CFORGE_TLS_KEY: "/src/deploy/key.pem"
     ports:

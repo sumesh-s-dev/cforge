@@ -155,6 +155,7 @@ int32_t db_insert_user(Ctx *ctx, Slice name, uint32_t age, uint64_t *out_id) {
         }
         *out_id = (uint64_t)atoll(PQgetvalue(r, 0, 0));
         PQclear(r);
+        cforge_redis_invalidate_user(*out_id);
         return 0;
     }
 #endif
@@ -174,6 +175,7 @@ int32_t db_insert_user(Ctx *ctx, Slice name, uint32_t age, uint64_t *out_id) {
     }
     *out_id = (uint64_t)sqlite3_last_insert_rowid(g_active->db);
     sqlite3_reset(ins);
+    cforge_redis_invalidate_user(*out_id);
     return 0;
 }
 
@@ -288,6 +290,9 @@ int32_t db_delete_user(Ctx *ctx, uint64_t id) {
         }
         int changed = atoi(PQcmdTuples(r));
         PQclear(r);
+        if (changed != 0) {
+            cforge_redis_invalidate_user(id);
+        }
         return changed == 0 ? 1 : 0;
     }
 #endif
@@ -306,5 +311,8 @@ int32_t db_delete_user(Ctx *ctx, uint64_t id) {
     }
     int changed = sqlite3_changes(g_active->db);
     sqlite3_reset(d);
+    if (changed != 0) {
+        cforge_redis_invalidate_user(id);
+    }
     return changed == 0 ? 1 : 0;
 }

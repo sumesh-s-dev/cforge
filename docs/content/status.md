@@ -29,23 +29,29 @@ Public site: **https://sumesh-s-dev.github.io/cforge/**
 | Area | Spec | Code |
 |---|---|---|
 | PostgreSQL wire / libpq | Documented | **Shipped** (`CFORGE_PG_DSN`) |
-| HTTP/2, HTTP/3, WebSockets | Documented | Planned |
+| HTTP/2, HTTP/3 | Documented | Planned |
+| **WebSockets** (`GET /ws` echo) | Documented | **Shipped** |
+| **Redis** cache invalidation | Documented | **Shipped** (`CFORGE_REDIS_URL`) |
 | Native IR compiler for server | Documented | In progress (`cforge_mach`) |
-| Redis / Kafka / NATS clients | Documented | Planned |
-| `@checked` / `@safe` modes | Documented | Planned |
+| Redis / Kafka / NATS clients | Documented | Redis partial; Kafka/NATS planned |
+| `@checked` / `@safe` modes | Documented | `@checked`/`@unsafe` parsed; `@safe` planned |
 | Package registry + semver resolver | Documented | Lockfile only |
 
 ## Environment
 
-| Variable | New in 1.0 |
+| Variable | Purpose |
 |---|---|
 | `CFORGE_DB_POOL` | SQLite pool size (1–8, default 4) |
+| `CFORGE_PG_DSN` | Optional Postgres via libpq |
+| `CFORGE_REDIS_URL` | Optional Redis (`redis://host:6379`) |
 
 ## Verification
 
 ```bash
 ./cforge package
 ./cforge test
+./cforge e2e              # test + systemd deploy + smoke
+./cforge everything       # + docs build + docker (if installed)
 curl http://127.0.0.1:8080/health
 ```
 

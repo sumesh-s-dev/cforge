@@ -46,6 +46,12 @@ void cforge_db_release(void);
 uint64_t cforge_db_errors(void);
 const char *cforge_db_backend(void);
 
+int cforge_redis_open(const char *url);
+void cforge_redis_close(void);
+const char *cforge_redis_backend(void);
+uint64_t cforge_redis_errors(void);
+void cforge_redis_invalidate_user(uint64_t id);
+
 int cforge_queue(Ctx *ctx, int status, const char *ctype, const void *body, size_t len, const char *extra);
 
 void cforge_log_set_level(int level);
